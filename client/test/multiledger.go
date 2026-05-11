@@ -241,15 +241,6 @@ func setupCoordinator(
 	w := wtest.NewWallet(bID)
 	acc := w.NewRandomAccount(rng)
 
-	// Setup multi-cooridnator adjudicator.
-	coord := multi.NewCoordinator()
-	coord.RegisterCoordinator(l1.ID(), l1.NewCoordinator(acc.Address()))
-	coord.RegisterCoordinator(l2.ID(), l2.NewCoordinator(acc.Address()))
-
-	// Setup coordinator watcher.
-	// watcher, err := local.NewWatcher(coord)
-	// require.NoError(err)
-
 	return MultiLedgerCoordinator{
 		WireAddress:   wireAddr[0],
 		WalletAccount: map[wallet.BackendID]wallet.Account{channel.TestBackendID: acc},

@@ -472,7 +472,8 @@ func (c *Channel) ensureRegistered(ctx context.Context) error {
 	phase := c.Phase()
 	if phase == channel.Registered ||
 		phase == channel.Progressing ||
-		phase == channel.Progressed {
+		phase == channel.Progressed ||
+		phase == channel.Coordinated {
 		return nil
 	}
 
@@ -542,6 +543,11 @@ func (c *Channel) awaitRegistered(ctx context.Context) error {
 }
 
 func (c *Channel) ensureCoordinated(ctx context.Context) error {
+	// Must be registered FIRST before TTP can coordinate.
+	if err := c.ensureRegistered(ctx); err != nil {
+		return errors.WithMessage(err, "ensuring registered before coordination")
+	}
+
 	phase := c.Phase()
 	if phase == channel.Coordinated {
 		return nil
@@ -589,6 +595,9 @@ func (c *Channel) awaitCoordinated(ctx context.Context) error {
 				return errors.WithMessage(err, "setting phase `Coordinated` recursive")
 			}
 			return nil
+		case *channel.RegisteredEvent, *channel.ProgressedEvent:
+			// Expected events before coordination — keep waiting.
+			continue
 		default:
 			log.Warnf("unrecognized event type: %T", e)
 			continue

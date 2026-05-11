@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"perun.network/go-perun/channel"
+	"perun.network/go-perun/channel/multi"
 	"perun.network/go-perun/channel/persistence"
 	"perun.network/go-perun/log"
 	"perun.network/go-perun/wallet"
@@ -37,18 +38,19 @@ import (
 type Client struct {
 	sync.Closer
 
-	address           map[wallet.BackendID]wire.Address
-	conn              clientConn
-	channels          chanRegistry
-	funder            channel.Funder
-	adjudicator       channel.Adjudicator
-	wallet            map[wallet.BackendID]wallet.Wallet
-	pr                persistence.PersistRestorer
-	log               log.Logger // structured logger for this client
-	version1Cache     version1Cache
-	fundingWatcher    *stateWatcher
-	settlementWatcher *stateWatcher
-	watcher           watcher.Watcher
+	address             map[wallet.BackendID]wire.Address
+	conn                clientConn
+	channels            chanRegistry
+	funder              channel.Funder
+	adjudicator         channel.Adjudicator
+	wallet              map[wallet.BackendID]wallet.Wallet
+	pr                  persistence.PersistRestorer
+	log                 log.Logger // structured logger for this client
+	version1Cache       version1Cache
+	fundingWatcher      *stateWatcher
+	settlementWatcher   *stateWatcher
+	watcher             watcher.Watcher
+	coordinatorNotifier multi.CoordinatorNotifier
 }
 
 // New creates a new State Channel Client.
@@ -98,15 +100,16 @@ func New(
 	}
 
 	c = &Client{
-		address:     address,
-		conn:        conn,
-		channels:    makeChanRegistry(),
-		funder:      funder,
-		adjudicator: adjudicator,
-		wallet:      wallet,
-		pr:          persistence.NonPersistRestorer,
-		log:         log,
-		watcher:     watcher,
+		address:             address,
+		conn:                conn,
+		channels:            makeChanRegistry(),
+		funder:              funder,
+		adjudicator:         adjudicator,
+		wallet:              wallet,
+		pr:                  persistence.NonPersistRestorer,
+		log:                 log,
+		watcher:             watcher,
+		coordinatorNotifier: nil,
 	}
 
 	c.fundingWatcher = newStateWatcher(c.matchFundingProposal)
@@ -164,6 +167,12 @@ func (c *Client) OnNewChannel(handler func(*Channel)) {
 // The PersistRestorer is not closed when the Client is closed.
 func (c *Client) EnablePersistence(pr persistence.PersistRestorer) {
 	c.pr = pr
+}
+
+// EnableCoordinationNotifier sets an optional outbound requester for
+// coordinator interactions during multi-ledger settlement.
+func (c *Client) EnableCoordinationNotifier(notifier multi.CoordinatorNotifier) {
+	c.coordinatorNotifier = notifier
 }
 
 // Channel queries a channel by its ID.

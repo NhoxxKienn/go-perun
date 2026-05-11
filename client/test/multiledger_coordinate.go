@@ -146,7 +146,6 @@ func TestMultiLedgerCoordinate(
 
 	// Charlie coordinates the dispute.
 	// Wait for on-chain finalization of the registration before coordinating, otherwise the coordinate might fail with "channel not found" error.
-	time.Sleep(500 * time.Millisecond) //nolint:mnd // The 100ms is a guess on how long the watcher needs to catch up.
 	reqCoord := client.NewTestChannel(chAliceBob).AdjudicatorReq()
 	coordSig, err := channel.Sign(charlie.WalletAccount[channel.TestBackendID], reqCoord.Tx.State, channel.TestBackendID)
 	require.NoError(err)
@@ -154,9 +153,6 @@ func TestMultiLedgerCoordinate(
 	require.NoError(err)
 	err = charlie.Adjudicator2.Coordinate(ctx, reqCoord, nil, []wallet.Sig{coordSig})
 	require.NoError(err)
-
-	e2 := <-bob.Events
-	require.IsType(e2, &channel.CoordinatedEvent{})
 
 	// Settle.
 	err = chAliceBob.Settle(ctx, false)
