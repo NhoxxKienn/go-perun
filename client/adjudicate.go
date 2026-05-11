@@ -84,10 +84,29 @@ func (c *Channel) startWatching() (watcher.StatesPub, watcher.AdjudicatorSub, er
 	if err != nil {
 		return nil, nil, errors.WithMessage(err, "registering channel with the watcher")
 	}
+
+	if channel.IsCoordinated(c.Params().Coordinator) && c.client.coordinatorNotifier != nil {
+		if c.IsLedgerChannel() {
+			err = c.client.coordinatorNotifier.NotifyWatchLedgerChannel(c.Ctx(), signedState)
+		} else {
+			err = c.client.coordinatorNotifier.NotifyWatchSubChannel(c.Ctx(), c.parent.ID(), signedState)
+		}
+		if err != nil {
+			return nil, nil, errors.WithMessage(err, "notifying coordinator")
+		}
+	}
+
 	ok := c.OnCloseAlways(func() {
 		err := c.client.watcher.StopWatching(c.Ctx(), c.ID())
 		if err != nil {
 			c.Log().Errorf("Error de-registering channel from watcher: %v", err)
+		}
+
+		if channel.IsCoordinated(c.Params().Coordinator) && c.client.coordinatorNotifier != nil {
+			err = c.client.coordinatorNotifier.NotifyStopWatch(c.Ctx(), c.ID())
+			if err != nil {
+				c.Log().Errorf("Error notifying coordinator about stopping watch: %v", err)
+			}
 		}
 	})
 	if !ok {
@@ -518,6 +537,7 @@ func (c *Channel) awaitRegistered(ctx context.Context) error {
 		switch e.(type) {
 		case *channel.RegisteredEvent:
 		case *channel.ProgressedEvent:
+		case *channel.CoordinatedEvent:
 		case *channel.ConcludedEvent:
 		default:
 			log.Warnf("unrecognized event type: %T", e)
@@ -569,6 +589,10 @@ func (c *Channel) ensureCoordinated(ctx context.Context) error {
 }
 
 func (c *Channel) awaitCoordinated(ctx context.Context) error {
+	phase := c.Phase()
+	if phase == channel.Coordinated {
+		return nil
+	}
 	// Start event subscription.
 	sub, err := c.adjudicator.Subscribe(ctx, c.Params().ID())
 	if err != nil {
@@ -595,7 +619,7 @@ func (c *Channel) awaitCoordinated(ctx context.Context) error {
 				return errors.WithMessage(err, "setting phase `Coordinated` recursive")
 			}
 			return nil
-		case *channel.RegisteredEvent, *channel.ProgressedEvent:
+		case *channel.RegisteredEvent, *channel.ProgressedEvent, *channel.ConcludedEvent:
 			// Expected events before coordination — keep waiting.
 			continue
 		default:
