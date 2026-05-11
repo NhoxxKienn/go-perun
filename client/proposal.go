@@ -400,6 +400,17 @@ func (c *Client) validTwoPartyProposal(
 		return errors.New("multi-ledger app channel not supported")
 	}
 
+	coordinator := proposal.Base().Coordinator
+	isCoordinated := channel.IsCoordinated(coordinator)
+	if isCoordinated {
+		if len(coordinator) != 1 {
+			return errors.Errorf("expected exactly 1 coordinator, got %d", len(coordinator))
+		}
+		if !channel.IsValidCoordinatorWithBackend(coordinator, proposal.Base().InitBals.Backends) {
+			return errors.New("invalid coordinator: backend does not match assets")
+		}
+	}
+
 	peers := c.proposalPeers(proposal)
 	if proposal.Base().NumPeers() != len(peers) {
 		return errors.Errorf("participants (%d) and peers (%d) dimension mismatch",
@@ -467,6 +478,26 @@ func (c *Client) validVirtualChannelProposal(prop *VirtualChannelProposalMsg, ou
 	numPeers := prop.NumPeers()
 	if numParents != numPeers {
 		return errors.Errorf("expected %d parent channels, got %d", numPeers, numParents)
+	}
+
+	coordinator := prop.Base().Coordinator
+	isCoordinated := channel.IsCoordinated(coordinator)
+	if isCoordinated {
+
+		// Coordinator must be the same for all parent channels and match the virtual channel coordinator.
+		for i, parentID := range prop.Parents {
+			p, err := c.Channel(parentID)
+			if err != nil {
+				return errors.Errorf("parent channel %d not found", i)
+			}
+			if !p.HasCoordinator() {
+				return errors.Errorf("parent channel %d is not coordinated", i)
+			}
+			if !channel.EqualAddressMap(p.Params().Coordinator, coordinator) {
+				return errors.Errorf("coordinator mismatch between parent channel %d and virtual channel", i)
+			}
+
+		}
 	}
 
 	parent, err := c.Channel(prop.Parents[ourIdx])
@@ -576,6 +607,7 @@ func (c *Client) completeCPP(
 		prop.Type() == wire.LedgerChannelProposal,
 		prop.Type() == wire.VirtualChannelProposal,
 		propBase.Aux,
+		propBase.Coordinator,
 	)
 
 	if c.channels.Has(params.ID()) {

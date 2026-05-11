@@ -143,7 +143,10 @@ func NewRandomBaseChannelProposal(rng *rand.Rand, opts ...channeltest.RandomOpt)
 		rng.Uint64(),
 		alloc,
 		WithNonceFrom(rng),
-		WithApp(app, data))
+		WithApp(app, data),
+		WithAux(opt.Aux(rng)),
+		WithCoordinator(opt.Coordinator(rng)),
+	)
 	if err != nil {
 		panic("Error generating random channel proposal: " + err.Error())
 	}

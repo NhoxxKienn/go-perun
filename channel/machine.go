@@ -89,6 +89,7 @@ const (
 	Registered
 	Progressing
 	Progressed
+	Coordinated
 	Withdrawing
 	Withdrawn
 	// LastPhase contains the value of the last phase. This is useful for testing.
@@ -107,6 +108,7 @@ func (p Phase) String() string {
 		"Registered",
 		"Progressing",
 		"Progressed",
+		"Coordinated",
 		"Withdrawing",
 		"Withdrawn",
 	}[p]
@@ -392,6 +394,14 @@ func (m *machine) SetProgressed(e *ProgressedEvent) error {
 	return nil
 }
 
+func (m *machine) SetCoordinated(e *CoordinatedEvent) error {
+	if !inPhase(m.phase, []Phase{Registered, Progressing, Progressed}) {
+		return m.phaseErrorf(m.selfTransition(), "can only coordinate after registration")
+	}
+	m.setStaging(Coordinated, e.State)
+	return nil
+}
+
 // SetWithdrawing sets the state machine to the Withdrawing phase. The current
 // state was registered on-chain and funds withdrawal is in progress.
 // This phase can only be reached from phase Final, Registered, Progressed, or
@@ -412,26 +422,28 @@ func (m *machine) SetWithdrawn() error {
 }
 
 var validPhaseTransitions = map[PhaseTransition]struct{}{
-	{InitActing, InitSigning}: {},
-	{InitSigning, Funding}:    {},
-	{Funding, Acting}:         {},
-	{Acting, Signing}:         {},
-	{Signing, Acting}:         {},
-	{Signing, Final}:          {},
-	{Funding, Registering}:    {},
-	{Acting, Registering}:     {},
-	{Signing, Registering}:    {},
-	{Final, Registering}:      {},
-	{Funding, Registered}:     {},
-	{Acting, Registered}:      {},
-	{Signing, Registered}:     {},
-	{Final, Registered}:       {},
-	{Registering, Registered}: {},
-	{Registered, Withdrawing}: {},
-	{Registered, Progressed}:  {},
-	{Progressing, Progressed}: {},
-	{Progressed, Withdrawing}: {},
-	{Withdrawing, Withdrawn}:  {},
+	{InitActing, InitSigning}:  {},
+	{InitSigning, Funding}:     {},
+	{Funding, Acting}:          {},
+	{Acting, Signing}:          {},
+	{Signing, Acting}:          {},
+	{Signing, Final}:           {},
+	{Funding, Registering}:     {},
+	{Acting, Registering}:      {},
+	{Signing, Registering}:     {},
+	{Final, Registering}:       {},
+	{Funding, Registered}:      {},
+	{Acting, Registered}:       {},
+	{Signing, Registered}:      {},
+	{Final, Registered}:        {},
+	{Registering, Registered}:  {},
+	{Registered, Coordinated}:  {},
+	{Registered, Withdrawing}:  {},
+	{Coordinated, Withdrawing}: {},
+	{Registered, Progressed}:   {},
+	{Progressing, Progressed}:  {},
+	{Progressed, Withdrawing}:  {},
+	{Withdrawing, Withdrawn}:   {},
 }
 
 func (m *machine) Clone() *machine {

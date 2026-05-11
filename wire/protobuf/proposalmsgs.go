@@ -199,6 +199,17 @@ func ToBaseChannelProposal(protoProp *BaseChannelProposal) (prop client.BaseChan
 	prop.ChallengeDuration = protoProp.GetChallengeDuration()
 	copy(prop.ProposalID[:], protoProp.GetProposalId())
 	copy(prop.NonceShare[:], protoProp.GetNonceShare())
+	copy(prop.Aux[:], protoProp.GetAux())
+	if protoProp.GetCoordinator() != nil {
+		prop.Coordinator, err = ToWalletAddr(protoProp.GetCoordinator())
+		if err != nil {
+			return prop, errors.WithMessage(err, "coordinator")
+		}
+		if len(prop.Coordinator) == 0 {
+			prop.Coordinator = nil
+		}
+	}
+
 	prop.InitBals, err = ToAllocation(protoProp.GetInitBals())
 	if err != nil {
 		return prop, errors.WithMessage(err, "init bals")
@@ -528,6 +539,13 @@ func FromBaseChannelProposal(prop client.BaseChannelProposal) (protoProp *BaseCh
 
 	protoProp.Aux = make([]byte, len(prop.Aux))
 	copy(protoProp.GetAux(), prop.Aux[:])
+
+	if prop.Coordinator != nil {
+		protoProp.Coordinator, err = FromWalletAddr(prop.Coordinator)
+		if err != nil {
+			return nil, errors.WithMessage(err, "coordinator")
+		}
+	}
 
 	protoProp.ChallengeDuration = prop.ChallengeDuration
 

@@ -68,6 +68,27 @@ type (
 		Register(context.Context, AdjudicatorReq, []SignedState) error
 	}
 
+	// CoordinatorSubscriber is the interface that groups the Coordinator and
+	// Subscribe methods.
+	//
+	// These methods are used to watch for adjudicator events on the blockchain
+	// and coordinate, if the event is a RegisteredEvent and the state in the
+	// event is not the latest.
+	CoordinatorSubscriber interface {
+		Coordinator
+		EventSubscriber
+	}
+
+	// Coordinator is the interface that wraps the Coordinate method.
+	//
+	// Coordinate should coordinate the cross-chain finalisation of the given channel on-chain.
+	// The corresponding signed sub-channel states must be provided,
+	// as well as the signatures of the coordinator over all states, to ensure that the coordinator is also aware of the finalisation.
+
+	Coordinator interface {
+		Coordinate(context.Context, AdjudicatorReq, []SignedState, []wallet.Sig) error
+	}
+
 	// Withdrawer is the interface that wraps the Withdraw method.
 	//
 	// Withdraw should conclude and withdraw the registered state, so that the
@@ -187,6 +208,14 @@ type (
 
 		State *State
 		Sigs  []wallet.Sig
+	}
+
+	CoordinatedEvent struct {
+		AdjudicatorEventBase // Channel ID and Refutation phase timeout
+
+		State     *State
+		Sigs      []wallet.Sig
+		CoordSigs wallet.Sig
 	}
 
 	// ConcludedEvent signals channel conclusion.

@@ -23,6 +23,7 @@ import (
 
 	"perun.network/go-perun/channel"
 	"perun.network/go-perun/wallet"
+	"perun.network/go-perun/wallet/test"
 )
 
 var (
@@ -467,6 +468,13 @@ func (o RandomOpt) Aux(rng io.Reader) channel.Aux {
 		o["aux"] = channel.Aux(a)
 	}
 	return o["aux"].(channel.Aux)
+}
+
+func (o RandomOpt) Coordinator(rng *rand.Rand) map[wallet.BackendID]wallet.Address {
+	if _, ok := o["coordinator"]; !ok {
+		o["coordinator"] = map[wallet.BackendID]wallet.Address{channel.TestBackendID: test.NewRandomAddress(rng, channel.TestBackendID)}
+	}
+	return o["coordinator"].(map[wallet.BackendID]wallet.Address)
 }
 
 // NumAssets returns the `NumAssets` value of the `RandomOpt`.

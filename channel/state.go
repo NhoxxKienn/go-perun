@@ -176,3 +176,16 @@ func EqualWireMaps(a, b map[wallet.BackendID]wire.Address) bool {
 	}
 	return true
 }
+
+// EqualAddressMap compares two wallet.Address maps for equality.
+func EqualAddressMap(a, b map[wallet.BackendID]wallet.Address) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, addr := range a {
+		if !addr.Equal(b[i]) {
+			return false
+		}
+	}
+	return true
+}

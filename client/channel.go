@@ -177,6 +177,11 @@ func (c *Channel) HasApp() bool {
 	return !channel.IsNoApp(c.State().App)
 }
 
+// HasCoordinator returns whether the channel has a coordinator.
+func (c *Channel) HasCoordinator() bool {
+	return channel.IsCoordinated(c.Params().Coordinator)
+}
+
 // init brings the state machine into the InitSigning phase. It is not callable
 // by the user since the Client initializes the channel controller.
 // The state machine is not locked as this function is expected to be called

@@ -102,14 +102,15 @@ type (
 	// BaseChannelProposal implements the channel proposal messages from the
 	// Multi-Party Channel Proposal Protocol (MPCPP).
 	BaseChannelProposal struct {
-		ProposalID        ProposalID          // Unique ID for the proposal.
-		ChallengeDuration uint64              // Dispute challenge duration.
-		NonceShare        NonceShare          // Proposer's channel nonce share.
-		App               channel.App         // App definition, or nil.
-		InitData          channel.Data        // Initial App data.
-		InitBals          *channel.Allocation // Initial balances.
-		FundingAgreement  channel.Balances    // Possibly different funding agreement from initial state's balances.
-		Aux               channel.Aux         // Auxiliary data.
+		ProposalID        ProposalID                          // Unique ID for the proposal.
+		ChallengeDuration uint64                              // Dispute challenge duration.
+		NonceShare        NonceShare                          // Proposer's channel nonce share.
+		App               channel.App                         // App definition, or nil.
+		InitData          channel.Data                        // Initial App data.
+		InitBals          *channel.Allocation                 // Initial balances.
+		FundingAgreement  channel.Balances                    // Possibly different funding agreement from initial state's balances.
+		Aux               channel.Aux                         // Auxiliary data.
+		Coordinator       map[wallet.BackendID]wallet.Address // Coordinator for multi-ledger channels.
 	}
 
 	// LedgerChannelProposalMsg is a channel proposal for ledger channels.
@@ -167,7 +168,7 @@ func (p BaseChannelProposal) NumPeers() int {
 func (p BaseChannelProposal) Encode(w io.Writer) error {
 	optAppAndDataEnc := channel.OptAppAndDataEnc{App: p.App, Data: p.InitData}
 	return perunio.Encode(w, p.ProposalID, p.ChallengeDuration, p.NonceShare,
-		optAppAndDataEnc, p.InitBals, p.FundingAgreement, p.Aux)
+		optAppAndDataEnc, p.InitBals, p.FundingAgreement, p.Aux, wallet.AddressDecMap(p.Coordinator))
 }
 
 // Decode decodes a BaseChannelProposal from an io.Reader.
@@ -176,8 +177,15 @@ func (p *BaseChannelProposal) Decode(r io.Reader) (err error) {
 		p.InitBals = new(channel.Allocation)
 	}
 	optAppAndDataDec := channel.OptAppAndDataDec{App: &p.App, Data: &p.InitData}
-	return perunio.Decode(r, &p.ProposalID, &p.ChallengeDuration, &p.NonceShare,
-		optAppAndDataDec, p.InitBals, &p.FundingAgreement, &p.Aux)
+	err = perunio.Decode(r, &p.ProposalID, &p.ChallengeDuration, &p.NonceShare,
+		optAppAndDataDec, p.InitBals, &p.FundingAgreement, &p.Aux, (*wallet.AddressDecMap)(&p.Coordinator))
+	if err != nil {
+		return err
+	}
+	if len(p.Coordinator) == 0 {
+		p.Coordinator = nil
+	}
+	return nil
 }
 
 // Valid checks that the channel proposal is valid:
@@ -372,6 +380,7 @@ func makeBaseChannelProposal(
 		InitBals:          initBals,
 		FundingAgreement:  fundingAgreement,
 		Aux:               opt.aux(),
+		Coordinator:       opt.coordinator(),
 	}, nil
 }
 
