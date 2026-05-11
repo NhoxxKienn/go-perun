@@ -85,6 +85,13 @@ func (m StateMachine) SetProgressed(ctx context.Context, e *channel.ProgressedEv
 	return errors.WithMessage(m.pr.Enabled(ctx, m.StateMachine), "Persister.Enabled")
 }
 
+func (m StateMachine) SetCoordinated(ctx context.Context, e *channel.CoordinatedEvent) error {
+	if err := m.StateMachine.SetCoordinated(e); err != nil {
+		return err
+	}
+	return errors.WithMessage(m.pr.PhaseChanged(ctx, m.StateMachine), "Persister.PhaseChanged")
+}
+
 // SetWithdrawing calls SetWithdrawing on the channel.StateMachine and then
 // persists the changed phase.
 func (m StateMachine) SetWithdrawing(ctx context.Context) error {

@@ -213,9 +213,8 @@ type (
 	CoordinatedEvent struct {
 		AdjudicatorEventBase // Channel ID and Refutation phase timeout
 
-		State     *State
-		Sigs      []wallet.Sig
-		CoordSigs wallet.Sig
+		State *State
+		Sigs  []wallet.Sig
 	}
 
 	// ConcludedEvent signals channel conclusion.
@@ -285,6 +284,18 @@ func NewProgressedEvent(id ID, timeout Timeout, state *State, idx Index) *Progre
 		},
 		State: state,
 		Idx:   idx,
+	}
+}
+
+func NewCoordinatedEvent(id ID, timeout Timeout, state *State, sigs []wallet.Sig) *CoordinatedEvent {
+	return &CoordinatedEvent{
+		AdjudicatorEventBase: AdjudicatorEventBase{
+			IDV:      id,
+			TimeoutV: timeout,
+			VersionV: state.Version,
+		},
+		State: state,
+		Sigs:  sigs,
 	}
 }
 

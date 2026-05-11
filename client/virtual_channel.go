@@ -133,6 +133,14 @@ func (c *Channel) watchVirtual() error {
 				}
 			}
 
+		case *channel.CoordinatedEvent:
+			if e.Version() > c.State().Version {
+				err := c.pushVirtualUpdate(ctx, e.State, e.Sigs)
+				if err != nil {
+					log.Warnf("error updating virtual channel: %v", err)
+				}
+			}
+
 		case *channel.ProgressedEvent:
 			log.Errorf("Virtual channel progressed: %v", e.ID())
 

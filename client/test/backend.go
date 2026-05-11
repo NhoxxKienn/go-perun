@@ -148,6 +148,12 @@ type MockAdjudicator struct {
 	acc wallet.Address
 }
 
+type MockCoordinator struct {
+	*MockBackend
+
+	acc wallet.Address
+}
+
 // Withdraw withdraws the balances of the given channel and its sub-channels.
 func (a *MockAdjudicator) Withdraw(ctx context.Context, req channel.AdjudicatorReq, subStates channel.StateMap) error {
 	return a.MockBackend.Withdraw(ctx, req, subStates, a.acc)
@@ -156,6 +162,13 @@ func (a *MockAdjudicator) Withdraw(ctx context.Context, req channel.AdjudicatorR
 // NewAdjudicator creates a new MockAdjudicator.
 func (b *MockBackend) NewAdjudicator(acc wallet.Address) *MockAdjudicator {
 	return &MockAdjudicator{
+		MockBackend: b,
+		acc:         acc,
+	}
+}
+
+func (b *MockBackend) NewCoordinator(acc wallet.Address) *MockCoordinator {
+	return &MockCoordinator{
 		MockBackend: b,
 		acc:         acc,
 	}
@@ -252,6 +265,56 @@ func (b *MockBackend) Progress(_ context.Context, req channel.ProgressReq) error
 			req.Idx,
 		),
 	)
+	return nil
+}
+
+func (b *MockBackend) Coordinate(_ context.Context, req channel.AdjudicatorReq, subChannels []channel.SignedState, coordSigs []wallet.Sig) error {
+	b.log.Infof("Coordinate: %+v", req)
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// Check concluded.
+	ch := req.Params.ID()
+	if b.isConcluded(ch) {
+		log.Debug("register: already concluded:", ch)
+		return nil
+	}
+
+	// Check register requirements.
+	states := make([]*channel.State, 1+len(subChannels))
+	states[0] = req.Tx.State
+	for i, subCh := range subChannels {
+		states[1+i] = subCh.State
+	}
+	if err := b.checkStates(states, checkCoordinate); err != nil {
+		return err
+	}
+
+	channels := append([]channel.SignedState{
+		{
+			Params: req.Params,
+			State:  req.Tx.State,
+			Sigs:   req.Tx.Sigs,
+		},
+	}, subChannels...)
+
+	duration := req.Params.ChallengeDuration
+	if duration > math.MaxInt64 {
+		return fmt.Errorf("challenge duration %d is too large", duration)
+	}
+	timeout := time.Now().Add(time.Duration(duration) * time.Millisecond)
+	for _, ch := range channels {
+		b.setLatestEvent(
+			ch.Params.ID(),
+			channel.NewCoordinatedEvent(
+				ch.Params.ID(),
+				&channel.TimeTimeout{Time: timeout},
+				ch.State,
+				ch.Sigs,
+			),
+		)
+	}
 	return nil
 }
 
@@ -382,6 +445,16 @@ type checkStateFunc func(e channel.AdjudicatorEvent, ok bool, s *channel.State) 
 func checkRegister(e channel.AdjudicatorEvent, ok bool, s *channel.State) error {
 	v := s.Version
 	if ok && e.Version() > v {
+		return fmt.Errorf("invalid version: expected >=%v, got %v", e.Version(), v)
+	}
+	return nil
+}
+
+// checkCoordinate checks the following for the given channels:
+// - If the channel is already registered, the given version must be greater or equal to the registered version.
+func checkCoordinate(e channel.AdjudicatorEvent, ok bool, s *channel.State) error {
+	v := s.Version
+	if ok && e.Version() < v {
 		return fmt.Errorf("invalid version: expected >=%v, got %v", e.Version(), v)
 	}
 	return nil

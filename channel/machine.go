@@ -407,7 +407,7 @@ func (m *machine) SetCoordinated(e *CoordinatedEvent) error {
 // This phase can only be reached from phase Final, Registered, Progressed, or
 // Withdrawing.
 func (m *machine) SetWithdrawing() error {
-	if !inPhase(m.phase, []Phase{Final, Registered, Progressed, Withdrawing}) {
+	if !inPhase(m.phase, []Phase{Final, Registered, Progressed, Coordinated, Withdrawing}) {
 		return m.phaseErrorf(m.selfTransition(), "can only withdraw after registering")
 	}
 	m.setPhase(Withdrawing)

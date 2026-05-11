@@ -93,3 +93,37 @@ func (s *AdjudicatorSubscription) Close() error {
 	close(s.done)
 	return nil
 }
+
+func (c *Coordinator) Subscribe(ctx context.Context, chID channel.ID) (channel.AdjudicatorSubscription, error) {
+	asub := &AdjudicatorSubscription{
+		events: make(chan channel.AdjudicatorEvent),
+		errors: make(chan error),
+		subs:   []channel.AdjudicatorSubscription{},
+		done:   make(chan struct{}),
+	}
+
+	for _, lc := range c.coordinators {
+		sub, err := lc.Subscribe(ctx, chID)
+		if err != nil {
+			asub.Close()
+			return nil, err
+		}
+		asub.subs = append(asub.subs, sub)
+
+		go func() {
+			for {
+				select {
+				case asub.events <- sub.Next():
+				case <-asub.done:
+					return
+				}
+			}
+		}()
+
+		go func() {
+			asub.errors <- sub.Err()
+		}()
+	}
+
+	return asub, nil
+}

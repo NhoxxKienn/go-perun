@@ -39,6 +39,7 @@ import (
 // MultiLedgerSetup is the setup of a multi-ledger test.
 type MultiLedgerSetup struct {
 	Client1, Client2 MultiLedgerClient
+	Coordinator      MultiLedgerCoordinator
 	Asset1, Asset2   multi.Asset
 	InitBalances     channel.Balances
 	UpdateBalances1  channel.Balances
@@ -61,16 +62,18 @@ func SetupMultiLedgerTest(t *testing.T) MultiLedgerSetup {
 	// Setup clients.
 	c1 := setupClient(t, rng, l1, l2, bus, channel.TestBackendID)
 	c2 := setupClient(t, rng, l1, l2, bus, channel.TestBackendID)
+	coord := setupCoordinator(t, rng, l1, l2, bus, channel.TestBackendID)
 
 	// Define assets.
 	a1 := NewMultiLedgerAsset(l1.ID(), chtest.NewRandomAsset(rng, channel.TestBackendID))
 	a2 := NewMultiLedgerAsset(l2.ID(), chtest.NewRandomAsset(rng, channel.TestBackendID))
 
 	return MultiLedgerSetup{
-		Client1: c1,
-		Client2: c2,
-		Asset1:  a1,
-		Asset2:  a2,
+		Client1:     c1,
+		Client2:     c2,
+		Coordinator: coord,
+		Asset1:      a1,
+		Asset2:      a2,
 		//nolint:mnd // We allow the balances to be magic numbers.
 		InitBalances: channel.Balances{
 			{big.NewInt(10), big.NewInt(0)}, // Asset 1.
@@ -211,5 +214,47 @@ func setupClient(
 		Adjudicator2:   l2.NewAdjudicator(acc.Address()),
 		BalanceReader1: l1.NewBalanceReader(acc.Address()),
 		BalanceReader2: l2.NewBalanceReader(acc.Address()),
+	}
+}
+
+type MultiLedgerCoordinator struct {
+	*client.Client
+
+	WireAddress                map[wallet.BackendID]wire.Address
+	WalletAccount              map[wallet.BackendID]wallet.Account
+	WalletAddress              map[wallet.BackendID]wallet.Address
+	Adjudicator1, Adjudicator2 channel.CoordinatorSubscriber
+}
+
+func setupCoordinator(
+	t *testing.T, rng *rand.Rand,
+	l1, l2 *MockBackend, bus wire.Bus,
+	bID wallet.BackendID,
+) MultiLedgerCoordinator {
+	t.Helper()
+	// require := require.New(t)
+
+	// Setup identity.
+	wireAddr := wiretest.NewRandomAddressesMap(rng, 1)
+
+	// Setup wallet and account.
+	w := wtest.NewWallet(bID)
+	acc := w.NewRandomAccount(rng)
+
+	// Setup multi-cooridnator adjudicator.
+	coord := multi.NewCoordinator()
+	coord.RegisterCoordinator(l1.ID(), l1.NewCoordinator(acc.Address()))
+	coord.RegisterCoordinator(l2.ID(), l2.NewCoordinator(acc.Address()))
+
+	// Setup coordinator watcher.
+	// watcher, err := local.NewWatcher(coord)
+	// require.NoError(err)
+
+	return MultiLedgerCoordinator{
+		WireAddress:   wireAddr[0],
+		WalletAccount: map[wallet.BackendID]wallet.Account{channel.TestBackendID: acc},
+		WalletAddress: map[wallet.BackendID]wallet.Address{channel.TestBackendID: acc.Address()},
+		Adjudicator1:  l1.NewCoordinator(acc.Address()),
+		Adjudicator2:  l2.NewCoordinator(acc.Address()),
 	}
 }

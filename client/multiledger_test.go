@@ -38,3 +38,12 @@ func TestMultiLedgerDispute(t *testing.T) {
 
 	ctest.TestMultiLedgerDispute(ctx, t, mlt, challengeDuration)
 }
+
+func TestMultiLedgerCoordinate(t *testing.T) {
+	mlt := ctest.SetupMultiLedgerTest(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), twoPartyTestTimeout)
+	defer cancel()
+
+	ctest.TestMultiLedgerCoordinate(ctx, t, mlt, challengeDuration)
+}

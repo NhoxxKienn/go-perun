@@ -130,6 +130,8 @@ func (c *Channel) setMachinePhase(ctx context.Context, e channel.AdjudicatorEven
 		err = c.machine.SetRegistered(ctx)
 	case *channel.ProgressedEvent:
 		err = c.machine.SetProgressed(ctx, e)
+	case *channel.CoordinatedEvent:
+		err = c.machine.SetCoordinated(ctx, e)
 	case *channel.ConcludedEvent:
 		// Do nothing as there is currently no corresponding phase in the channel machine.
 	default:
@@ -248,10 +250,18 @@ func (c *Channel) ForceUpdate(ctx context.Context, updater func(*channel.State))
 // Returns ChainNotReachableError if the connection to the blockchain network
 // fails when sending a transaction to / reading from the blockchain.
 func (c *Channel) Settle(ctx context.Context, secondary bool) (err error) {
+
 	if !c.State().IsFinal {
-		err := c.ensureRegistered(ctx)
-		if err != nil {
-			return err
+		if channel.IsCoordinated(c.Params().Coordinator) {
+			err = c.ensureCoordinated(ctx)
+			if err != nil {
+				return errors.WithMessage(err, "ensuring coordinated")
+			}
+		} else {
+			err := c.ensureRegistered(ctx)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -425,6 +435,12 @@ func (c *Channel) setRegisteredRecursive(ctx context.Context) (err error) {
 	})
 }
 
+func (c *Channel) setCoordinatedRecursive(ctx context.Context, e *channel.CoordinatedEvent) (err error) {
+	return c.applyRecursive(func(c *Channel) error {
+		return c.machine.SetCoordinated(ctx, e)
+	})
+}
+
 // gatherSubChannelStates gathers the state of all sub-channels recursively.
 // Assumes sub-channels are locked.
 func (c *Channel) gatherSubChannelStates() (states []channel.SignedState, err error) {
@@ -521,6 +537,62 @@ func (c *Channel) awaitRegistered(ctx context.Context) error {
 
 		// Wait until end of channel phase.
 		return e.Timeout().Wait(ctx)
+	}
+	return sub.Err()
+}
+
+func (c *Channel) ensureCoordinated(ctx context.Context) error {
+	phase := c.Phase()
+	if phase == channel.Coordinated {
+		return nil
+	}
+
+	coordinated := make(chan error)
+
+	go func() {
+		coordinated <- c.awaitCoordinated(ctx)
+	}()
+
+	var err error
+	select {
+	case err = <-coordinated:
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+	return err
+}
+
+func (c *Channel) awaitCoordinated(ctx context.Context) error {
+	// Start event subscription.
+	sub, err := c.adjudicator.Subscribe(ctx, c.Params().ID())
+	if err != nil {
+		return errors.WithMessage(err, "subscribing to adjudicator events")
+	}
+
+	defer func() {
+		if err := sub.Close(); err != nil {
+			c.Log().Warn("Subscription closed with error:", err)
+		}
+	}()
+
+	// Scan for event.
+	for e := sub.Next(); e != nil; e = sub.Next() {
+		switch e.(type) {
+		case *channel.CoordinatedEvent:
+			l, err := c.tryLockRecursive(ctx)
+			defer l.Unlock()
+			if err != nil {
+				return errors.WithMessage(err, "locking recursive")
+			}
+			err = c.setCoordinatedRecursive(ctx, e.(*channel.CoordinatedEvent))
+			if err != nil {
+				return errors.WithMessage(err, "setting phase `Coordinated` recursive")
+			}
+			return nil
+		default:
+			log.Warnf("unrecognized event type: %T", e)
+			continue
+		}
 	}
 	return sub.Err()
 }
