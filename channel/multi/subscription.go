@@ -23,13 +23,12 @@ import (
 // Subscribe creates a new multi-ledger AdjudicatorSubscription.
 func (a *Adjudicator) Subscribe(ctx context.Context, chID channel.ID) (channel.AdjudicatorSubscription, error) {
 	asub := &AdjudicatorSubscription{
-		events: make(chan channel.AdjudicatorEvent),
+		events: make(chan LedgerAdjudicatorEvent),
 		errors: make(chan error),
-		subs:   []channel.AdjudicatorSubscription{},
 		done:   make(chan struct{}),
 	}
 
-	for _, la := range a.adjudicators {
+	for key, la := range a.adjudicators {
 		sub, err := la.Subscribe(ctx, chID)
 		if err != nil {
 			asub.Close()
@@ -39,8 +38,15 @@ func (a *Adjudicator) Subscribe(ctx context.Context, chID channel.ID) (channel.A
 
 		go func() {
 			for {
+				e := sub.Next()
+				if e == nil {
+					return // subscription closed
+				}
 				select {
-				case asub.events <- sub.Next():
+				case asub.events <- LedgerAdjudicatorEvent{
+					LedgerKey:        key,
+					AdjudicatorEvent: e,
+				}:
 				case <-asub.done:
 					return
 				}
@@ -55,10 +61,16 @@ func (a *Adjudicator) Subscribe(ctx context.Context, chID channel.ID) (channel.A
 	return asub, nil
 }
 
+// LedgerAdjudicatorEvent is a wrapper for channel.AdjudicatorEvent with the ledger key.
+type LedgerAdjudicatorEvent struct {
+	LedgerKey LedgerBackendKey
+	channel.AdjudicatorEvent
+}
+
 // AdjudicatorSubscription is a multi-ledger adjudicator subscription.
 type AdjudicatorSubscription struct {
 	subs   []channel.AdjudicatorSubscription
-	events chan channel.AdjudicatorEvent
+	events chan LedgerAdjudicatorEvent
 	errors chan error
 	done   chan struct{}
 }
