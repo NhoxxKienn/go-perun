@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	notifyWachLedgerProtocolID = "/coordinator/notify-watch-ledger/1.0.0"
-	notifyWatchSubProtocolID   = "/coordinator/notify-watch-sub/1.0.0"
-	notifyStopWatchProtocolID  = "/coordinator/notify-stop-watch/1.0.0"
+	notifyWatchLedgerProtocolID = "/coordinator/notify-watch-ledger/1.0.0"
+	notifyWatchSubProtocolID    = "/coordinator/notify-watch-sub/1.0.0"
+	notifyStopWatchProtocolID   = "/coordinator/notify-stop-watch/1.0.0"
 
 	coordID             = "coordinator" //TODO:add the coordinator's peer ID here
 	responseStatusOK    = "ok"
@@ -40,6 +40,10 @@ type NotifyWatchSubChannelRequest struct {
 	SignedState channel.SignedState `json:"signed_state"`
 }
 
+type NotifyStopWatchRequest struct {
+	ID channel.ID `json:"id"`
+}
+
 var _ multi.CoordinatorNotifier = (*RelayCoordinatorNotifier)(nil)
 
 // RelayCoordinatorNotifier is a simple implementation of CoordinatorNotifier that relays notifications to the coordinator via the Account.
@@ -54,7 +58,7 @@ func NewRelayCoordinatorNotifier(acc *Account) *RelayCoordinatorNotifier {
 
 // NotifyWatchLedgerChannel sends a notification to the coordinator to start watching a ledger channel.
 func (r *RelayCoordinatorNotifier) NotifyWatchLedgerChannel(ctx context.Context, signedState channel.SignedState) error {
-	s, err := r.account.newRelayStream(ctx, coordID, notifyWachLedgerProtocolID)
+	s, err := r.account.newRelayStream(ctx, coordID, notifyWatchLedgerProtocolID)
 	if err != nil {
 		return err
 	}
@@ -142,11 +146,7 @@ func (r *RelayCoordinatorNotifier) NotifyStopWatch(ctx context.Context, id chann
 	}
 	defer s.Close()
 
-	req := struct {
-		ID channel.ID `json:"id"`
-	}{
-		ID: id,
-	}
+	req := NotifyStopWatchRequest{ID: id}
 	resp := &Response{}
 	err = json.NewEncoder(s).Encode(req)
 	if err != nil {
