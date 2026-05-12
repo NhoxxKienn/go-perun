@@ -15,6 +15,13 @@ type Coordinator struct {
 	coordinators map[LedgerBackendKey]channel.CoordinatorSubscriber
 }
 
+// NewCoordinator creates a new multi-ledger coordinator.
+func NewCoordinator() *Coordinator {
+	return &Coordinator{
+		coordinators: make(map[LedgerBackendKey]channel.CoordinatorSubscriber),
+	}
+}
+
 // RegisterCoordinator registers a coordinator for a given ledger.
 func (c *Coordinator) RegisterCoordinator(l LedgerBackendID, lc channel.CoordinatorSubscriber) {
 	key := LedgerBackendKey{BackendID: l.BackendID(), LedgerID: string(l.LedgerID().MapKey())}
