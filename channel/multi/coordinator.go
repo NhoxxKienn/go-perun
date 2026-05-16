@@ -59,8 +59,8 @@ func (c *Coordinator) Subscribe(ctx context.Context, chID channel.ID) (channel.A
 		done:   make(chan struct{}),
 	}
 
-	for key, lc := range c.coordinators {
-		sub, err := lc.Subscribe(ctx, chID)
+	for key, la := range c.coordinators {
+		sub, err := la.Subscribe(ctx, chID)
 		if err != nil {
 			asub.Close()
 			return nil, err
@@ -70,14 +70,8 @@ func (c *Coordinator) Subscribe(ctx context.Context, chID channel.ID) (channel.A
 		go func() {
 			for {
 				e := sub.Next()
-				if e == nil {
-					return // subscription closed
-				}
 				select {
-				case asub.events <- LedgerAdjudicatorEvent{
-					LedgerKey:        key,
-					AdjudicatorEvent: e,
-				}:
+				case asub.events <- LedgerAdjudicatorEvent{LedgerKey: key, AdjudicatorEvent: e}:
 				case <-asub.done:
 					return
 				}
@@ -123,10 +117,4 @@ func (c *Coordinator) dispatch(assetIDs []LedgerBackendID, f func(channel.Coordi
 	}
 
 	return nil
-}
-
-// LedgerAdjudicatorEvent is a wrapper for channel.AdjudicatorEvent with the ledger key.
-type LedgerAdjudicatorEvent struct {
-	LedgerKey LedgerBackendKey
-	channel.AdjudicatorEvent
 }

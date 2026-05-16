@@ -39,14 +39,8 @@ func (a *Adjudicator) Subscribe(ctx context.Context, chID channel.ID) (channel.A
 		go func() {
 			for {
 				e := sub.Next()
-				if e == nil {
-					return // subscription closed
-				}
 				select {
-				case asub.events <- LedgerAdjudicatorEvent{
-					LedgerKey:        key,
-					AdjudicatorEvent: e,
-				}:
+				case asub.events <- LedgerAdjudicatorEvent{LedgerKey: key, AdjudicatorEvent: e}:
 				case <-asub.done:
 					return
 				}
@@ -77,11 +71,29 @@ type AdjudicatorSubscription struct {
 
 // Next returns the next event.
 func (s *AdjudicatorSubscription) Next() channel.AdjudicatorEvent {
+	e, _, ok := s.NextWithKey()
+	if !ok {
+		return nil
+	}
+	return e
+}
+
+// NextWithKey is the coordinator-facing variant of Next.
+// It returns the same concrete inner event as Next, together with the
+// LedgerBackendKey identifying which chain emitted it.
+// The boolean is false when the subscription is closed.
+//
+// Usage (coordinator only):
+//
+//	if sub, ok := rawSub.(*multi.AdjudicatorSubscription); ok {
+//	    e, key, ok := sub.NextWithKey()
+//	}
+func (s *AdjudicatorSubscription) NextWithKey() (channel.AdjudicatorEvent, LedgerBackendKey, bool) {
 	select {
 	case e := <-s.events:
-		return e
+		return e.AdjudicatorEvent, e.LedgerKey, true
 	case <-s.done:
-		return nil
+		return nil, LedgerBackendKey{}, false
 	}
 }
 
