@@ -89,7 +89,7 @@ func (m StateMachine) SetCoordinated(ctx context.Context, e *channel.Coordinated
 	if err := m.StateMachine.SetCoordinated(e); err != nil {
 		return err
 	}
-	return errors.WithMessage(m.pr.PhaseChanged(ctx, m.StateMachine), "Persister.PhaseChanged")
+	return errors.WithMessage(m.pr.Enabled(ctx, m.StateMachine), "Persister.Enabled")
 }
 
 // SetWithdrawing calls SetWithdrawing on the channel.StateMachine and then
