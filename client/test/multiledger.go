@@ -218,8 +218,6 @@ func setupClient(
 }
 
 type MultiLedgerCoordinator struct {
-	*client.Client
-
 	WireAddress                map[wallet.BackendID]wire.Address
 	WalletAccount              map[wallet.BackendID]wallet.Account
 	WalletAddress              map[wallet.BackendID]wallet.Address
