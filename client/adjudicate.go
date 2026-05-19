@@ -47,13 +47,10 @@ func (c *Channel) Watch(h AdjudicatorEventHandler) error {
 	log := c.Log().WithField("proc", "watcher")
 	defer log.Info("Watcher returned.")
 
-	statesPub, eventsSub, err := c.startWatching()
+	eventsSub, err := c.startWatching()
 	if err != nil {
 		return err
 	}
-	c.machMtx.Lock()
-	c.statesPub = statesPub
-	c.machMtx.Unlock()
 	err = c.handleEvents(eventsSub, h)
 	if err != nil {
 		return errors.WithMessage(err, "handling events from watcher")
@@ -64,7 +61,7 @@ func (c *Channel) Watch(h AdjudicatorEventHandler) error {
 	return err
 }
 
-func (c *Channel) startWatching() (watcher.StatesPub, watcher.AdjudicatorSub, error) {
+func (c *Channel) startWatching() (watcher.AdjudicatorSub, error) {
 	c.machMtx.Lock()
 	defer c.machMtx.Unlock()
 
@@ -82,8 +79,13 @@ func (c *Channel) startWatching() (watcher.StatesPub, watcher.AdjudicatorSub, er
 		return c.client.watcher.StartWatchingSubChannel(c.Ctx(), c.parent.ID(), signedState)
 	}()
 	if err != nil {
-		return nil, nil, errors.WithMessage(err, "registering channel with the watcher")
+		return nil, errors.WithMessage(err, "registering channel with the watcher")
 	}
+
+	// Assign while machMtx is still held so no concurrent Update can publish
+	// to the noopStatesPub default between startWatching returning and Watch
+	// re-acquiring the lock.
+	c.statesPub = statesPub
 
 	if channel.IsCoordinated(c.Params().Coordinator) && c.client.coordinatorNotifier != nil {
 		if c.IsLedgerChannel() {
@@ -92,7 +94,7 @@ func (c *Channel) startWatching() (watcher.StatesPub, watcher.AdjudicatorSub, er
 			err = c.client.coordinatorNotifier.NotifyWatchSubChannel(c.Ctx(), c.parent.ID(), signedState)
 		}
 		if err != nil {
-			return nil, nil, errors.WithMessage(err, "notifying coordinator")
+			return nil, errors.WithMessage(err, "notifying coordinator")
 		}
 	}
 
@@ -110,9 +112,9 @@ func (c *Channel) startWatching() (watcher.StatesPub, watcher.AdjudicatorSub, er
 		}
 	})
 	if !ok {
-		return nil, nil, errors.WithMessage(err, "channel already closed")
+		return nil, errors.WithMessage(err, "channel already closed")
 	}
-	return statesPub, eventsSub, nil
+	return eventsSub, nil
 }
 
 func (c *Channel) handleEvents(eventsSub watcher.AdjudicatorSub, h AdjudicatorEventHandler) error {
