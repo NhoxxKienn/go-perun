@@ -379,24 +379,30 @@ func (ch *ch) handleEventsFromChain(registerer channel.Registerer, chRegistry *r
 		cancel()
 	}()
 
+	log.Debugf("[watcher] handleEventsFromChain started ch=%x isSubCh=%v", ch.id[:4], ch.isSubChannel())
+
 	for e := ch.eventsFromChainSub.Next(); e != nil; e = ch.eventsFromChainSub.Next() {
+		log.Debugf("[watcher] handleEventsFromChain got event type=%T version=%d ch=%x", e, e.Version(), ch.id[:4])
+
 		switch e := e.(type) {
 		case *channel.RegisteredEvent:
 			ch.handleRegisteredEvent(ctx, e, registerer, chRegistry)
 		case *channel.ProgressedEvent:
-			log.Debugf("Received progressed event from chain: %v", e)
+			log.Debugf("[watcher] Received progressed event from chain: %v", e)
 			ch.eventsToClientPub.publish(e)
 		case *channel.CoordinatedEvent:
-			log.Debugf("Received coordinated event from chain: %v", e)
+			log.Debugf("[watcher] Received coordinated event from chain: %v", e)
 			ch.eventsToClientPub.publish(e)
 		case *channel.ConcludedEvent:
-			log.Debugf("Received concluded event from chain: %v", e)
+			log.Debugf("[watcher] Received concluded event from chain: %v", e)
 			ch.eventsToClientPub.publish(e)
 		default:
 			// This should never happen.
 			log.Error("Received adjudicator event of unknown type (%T) from chain: %v", e)
 		}
 	}
+
+	log.Debugf("[watcher] handleEventsFromChain loop ended (nil) ch=%x", ch.id[:4])
 	err := ch.eventsFromChainSub.Err()
 	if err != nil {
 		log.Errorf("Subscription to adjudicator events from chain was closed with error: %v", err)
@@ -414,6 +420,8 @@ func (ch *ch) handleRegisteredEvent(
 		parent = ch.parent
 	}
 
+	log.Debugf("[watcher] handleRegisteredEvent trying subChsAccess ch=%x event_version=%d", ch.id[:4], e.Version())
+
 	// The following lock ensures that when there are one or more sub-channels and
 	// an adjudicator event is received for each channel, the events are processed
 	// one after the other.
@@ -428,10 +436,11 @@ func (ch *ch) handleRegisteredEvent(
 
 	log := log.WithFields(log.Fields{"ID": e.ID(), "Version": e.Version()})
 	log.Debug("Received registered event from chain")
-
+	log.Debugf("[watcher] handleRegisteredEvent calling txRetriever.retrieve ch=%x", ch.id[:4])
 	latestTx := ch.txRetriever.retrieve()
 	log.Debugf("Latest version is (%d)", latestTx.Version)
-
+	log.Debugf("[watcher] handleRegisteredEvent latestTx.Version=%d event.Version=%d ch=%x", latestTx.Version, e.Version(),
+		ch.id[:4])
 	// A higher version is available and has not been registered previously.
 	higherVersionAvailable := e.Version() < latestTx.Version && e.Version() >= ch.registeredVersion
 	// We have a multi-ledger channel and it has not been registered previously.
@@ -440,7 +449,9 @@ func (ch *ch) handleRegisteredEvent(
 	unregisteredMultiLedger := ch.multiLedger && (!ch.registered || ch.registeredVersion < e.Version())
 	if higherVersionAvailable || unregisteredMultiLedger {
 		log.Debugf("Registering latest version (%d)", latestTx.Version)
+		log.Debugf("[watcher] handleRegisteredEvent calling registerDispute parent=%x", parent.id[:4])
 		err := registerDispute(ctx, chRegistry, registerer, parent)
+		log.Debugf("[watcher] handleRegisteredEvent registerDispute returned err=%v parent=%x", err, parent.id[:4])
 		if err != nil {
 			log.Error("Error registering dispute: ", err)
 			return
@@ -487,7 +498,10 @@ func retrieveLatestSubStates(r *registry, parent *ch) (channel.Transaction, []ch
 		// Can be done concurrently.
 		subCh, ok := r.retrieve(parentTx.Locked[i].ID)
 		if ok {
+			log.Debugf("[watcher] retrieveLatestSubStates calling subCh.txRetriever.retrieve subCh=%x",
+				parentTx.Locked[i].ID[:4])
 			subChTx := subCh.txRetriever.retrieve()
+			log.Debugf("[watcher] retrieveLatestSubStates subCh version=%d", subChTx.Version)
 			subStates[i] = makeSignedState(subCh.params, subChTx)
 		} else {
 			subStates[i] = parent.archivedSubChStates[parentTx.Locked[i].ID]

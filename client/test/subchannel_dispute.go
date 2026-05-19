@@ -92,8 +92,11 @@ func (r *DisputeSusie) exec(_cfg ExecConfig, ledgerChannel *paymentChannel) {
 
 	// Wait until other party has refuted.
 	for {
+		r.log.Debugf("[DisputeSusie] calling sub.Next()")
 		event := sub.Next()
+		r.log.Debugf("[DisputeSusie] sub.Next() returned event=%v (nil=%v)", event, event == nil)
 		r.RequireTrue(event != nil)
+		r.log.Debugf("[DisputeSusie] got event version=%d (need >0)", event.Version())
 		if event.Version() > 0 {
 			r.RequireNoError(sub.Close())
 			r.RequireNoError(sub.Err())
@@ -140,9 +143,11 @@ const channelWatcherWait = 100 * time.Millisecond
 
 // HandleAdjudicatorEvent is the callback for adjudicator event handling.
 func (r *DisputeTim) HandleAdjudicatorEvent(e channel.AdjudicatorEvent) {
-	r.log.Infof("HandleAdjudicatorEvent: channelID = %x, version = %v, type = %T", e.ID(), e.Version(), e)
+	r.log.Debugf("[HandleAdjudicatorEvent] type=%T id=%x version=%d subCh=%x", e, e.ID(), e.Version(), r.subCh)
 	if e, ok := e.(*channel.RegisteredEvent); ok && e.ID() == r.subCh {
+		r.log.Debugf("[HandleAdjudicatorEvent] sending to r.registered version=%d", e.Version())
 		r.registered <- e
+		r.log.Debugf("[HandleAdjudicatorEvent] sent to r.registered")
 	}
 }
 
@@ -194,10 +199,12 @@ func (r *DisputeTim) exec(_cfg ExecConfig, ledgerChannel *paymentChannel, propHa
 		for {
 			select {
 			case e := <-r.registered:
+				r.log.Debugf("[DisputeTim] r.registered received version=%d need=%d", e.Version(), subChannel.State().Version)
 				if e.Version() == subChannel.State().Version {
 					return e
 				}
 			case <-r.Ctx().Done():
+				r.log.Debugf("[DisputeTim] r.registered wait context done")
 				r.RequireNoError(r.Ctx().Err())
 			}
 		}
