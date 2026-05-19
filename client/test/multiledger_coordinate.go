@@ -147,7 +147,7 @@ func TestMultiLedgerCoordinate(
 	// Charlie coordinates the dispute.
 	// Wait for on-chain finalization of the registration before coordinating, otherwise the coordinate might fail with "channel not found" error.
 	reqCoord := client.NewTestChannel(chAliceBob).AdjudicatorReq()
-	err = charlie.Coordinate(ctx, reqCoord, nil, nil)
+	err = charlie.Coordinate(ctx, reqCoord, nil, bID1)
 	require.NoError(err)
 
 	// Settle.

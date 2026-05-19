@@ -17,6 +17,7 @@ package test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math/big"
 	"math/rand"
 	"testing"
@@ -265,6 +266,18 @@ func (c *MultiLedgerCoordinator) Sign(req channel.AdjudicatorReq, bid wallet.Bac
 }
 
 // Coordinate coordinates a multi-ledger channel by dispatching the call to the multi-ledger coordinator.
-func (c *MultiLedgerCoordinator) Coordinate(ctx context.Context, req channel.AdjudicatorReq, signedStates []channel.SignedState, coordSigs []wallet.Sig) error {
-	return c.Multicoordinator.Coordinate(ctx, req, signedStates, coordSigs)
+func (c *MultiLedgerCoordinator) Coordinate(ctx context.Context, req channel.AdjudicatorReq, signedSubstates []channel.SignedState, bid wallet.BackendID) error {
+	coordSigs := make([]wallet.Sig, len(signedSubstates)+1)
+	var err error
+	coordSigs[0], err = c.Sign(req, bid)
+	if err != nil {
+		return fmt.Errorf("signing adjudicator request: %w", err)
+	}
+	for i := range signedSubstates {
+		coordSigs[i+1], err = c.Sign(req, bid)
+		if err != nil {
+			return fmt.Errorf("signing adjudicator request: %w", err)
+		}
+	}
+	return c.Multicoordinator.Coordinate(ctx, req, signedSubstates, coordSigs)
 }
