@@ -228,6 +228,11 @@ func WithAux(aux channel.Aux) RandomOpt {
 	return RandomOpt{"aux": aux}
 }
 
+// WithCoordinator sets the `Coordinator` attribute.
+func WithCoordinator(coordinator map[wallet.BackendID]wallet.Address) RandomOpt {
+	return RandomOpt{"coordinator": coordinator}
+}
+
 // Append inserts all `opts` into the receiving object and returns the result.
 // Overrides entries that occur more than once with the last occurrence.
 func (o RandomOpt) Append(opts ...RandomOpt) RandomOpt {

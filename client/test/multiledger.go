@@ -16,6 +16,7 @@ package test
 
 import (
 	"bytes"
+	"context"
 	"math/big"
 	"math/rand"
 	"testing"
@@ -221,7 +222,8 @@ type MultiLedgerCoordinator struct {
 	WireAddress                map[wallet.BackendID]wire.Address
 	WalletAccount              map[wallet.BackendID]wallet.Account
 	WalletAddress              map[wallet.BackendID]wallet.Address
-	Adjudicator1, Adjudicator2 channel.CoordinatorSubscriber
+	Multicoordinator           *multi.Coordinator
+	Coordinator1, Coordinator2 channel.CoordinatorSubscriber
 }
 
 func setupCoordinator(
@@ -239,11 +241,30 @@ func setupCoordinator(
 	w := wtest.NewWallet(bID)
 	acc := w.NewRandomAccount(rng)
 
+	coord1 := l1.NewCoordinator(acc.Address())
+	coord2 := l2.NewCoordinator(acc.Address())
+
+	coord := multi.NewCoordinator()
+	coord.RegisterCoordinator(l1.ID(), coord1)
+	coord.RegisterCoordinator(l2.ID(), coord2)
+
 	return MultiLedgerCoordinator{
-		WireAddress:   wireAddr[0],
-		WalletAccount: map[wallet.BackendID]wallet.Account{channel.TestBackendID: acc},
-		WalletAddress: map[wallet.BackendID]wallet.Address{channel.TestBackendID: acc.Address()},
-		Adjudicator1:  l1.NewCoordinator(acc.Address()),
-		Adjudicator2:  l2.NewCoordinator(acc.Address()),
+		WireAddress:      wireAddr[0],
+		WalletAccount:    map[wallet.BackendID]wallet.Account{channel.TestBackendID: acc},
+		WalletAddress:    map[wallet.BackendID]wallet.Address{channel.TestBackendID: acc.Address()},
+		Multicoordinator: coord,
+		Coordinator1:     coord1,
+		Coordinator2:     coord2,
 	}
+}
+
+// Sign signs the given adjudicator request for the given backend ID.
+func (c *MultiLedgerCoordinator) Sign(req channel.AdjudicatorReq, bid wallet.BackendID) (wallet.Sig, error) {
+	coordSig, err := channel.Sign(c.WalletAccount[bid], req.Tx.State, bid)
+	return coordSig, err
+}
+
+// Coordinate coordinates a multi-ledger channel by dispatching the call to the multi-ledger coordinator.
+func (c *MultiLedgerCoordinator) Coordinate(ctx context.Context, req channel.AdjudicatorReq, signedStates []channel.SignedState, coordSigs []wallet.Sig) error {
+	return c.Multicoordinator.Coordinate(ctx, req, signedStates, coordSigs)
 }

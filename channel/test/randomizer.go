@@ -205,14 +205,7 @@ func NewRandomParams(rng *rand.Rand, opts ...RandomOpt) *channel.Params {
 	ledger := opt.LedgerChannel(rng)
 	virtual := opt.VirtualChannel(rng)
 	aux := opt.Aux(rng)
-
-	var coordinator map[wallet.BackendID]wallet.Address
-	var backend wallet.BackendID
-	if backend, _ = opt.Backend(); backend != 0 {
-		coordinator = map[wallet.BackendID]wallet.Address{backend: test.NewRandomAddress(rng, backend)}
-	} else {
-		coordinator = map[wallet.BackendID]wallet.Address{channel.TestBackendID: test.NewRandomAddress(rng, channel.TestBackendID)}
-	}
+	coordinator := opt.Coordinator(rng)
 
 	params := channel.NewParamsUnsafe(challengeDuration, parts, app, nonce, ledger, virtual, aux, coordinator)
 	updateOpts(opts, WithParams(params))
