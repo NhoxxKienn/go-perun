@@ -395,9 +395,6 @@ func (m *machine) SetProgressed(e *ProgressedEvent) error {
 }
 
 func (m *machine) SetCoordinated(e *CoordinatedEvent) error {
-	if !inPhase(m.phase, []Phase{Registered, Progressing, Progressed}) {
-		return m.phaseErrorf(m.selfTransition(), "can only coordinate after registration")
-	}
 	m.forceState(Coordinated, e.State)
 	return nil
 }

@@ -483,20 +483,17 @@ func (c *Client) validVirtualChannelProposal(prop *VirtualChannelProposalMsg, ou
 	coordinator := prop.Base().Coordinator
 	isCoordinated := channel.IsCoordinated(coordinator)
 	if isCoordinated {
-
-		// Coordinator must be the same for all parent channels and match the virtual channel coordinator.
-		for i, parentID := range prop.Parents {
-			p, err := c.Channel(parentID)
-			if err != nil {
-				return errors.Errorf("parent channel %d not found", i)
-			}
-			if !p.HasCoordinator() {
-				return errors.Errorf("parent channel %d is not coordinated", i)
-			}
-			if !channel.EqualAddressMap(p.Params().Coordinator, coordinator) {
-				return errors.Errorf("coordinator mismatch between parent channel %d and virtual channel", i)
-			}
-
+		// Only verify the participant's own parent channel — other participants
+		// verify their own parents when they accept the proposal.
+		p, err := c.Channel(prop.Parents[ourIdx])
+		if err != nil {
+			return errors.Errorf("parent channel %d not found", ourIdx)
+		}
+		if !p.HasCoordinator() {
+			return errors.Errorf("parent channel %d is not coordinated", ourIdx)
+		}
+		if !channel.EqualAddressMap(p.Params().Coordinator, coordinator) {
+			return errors.Errorf("coordinator mismatch between parent channel %d and virtual channel", ourIdx)
 		}
 	}
 

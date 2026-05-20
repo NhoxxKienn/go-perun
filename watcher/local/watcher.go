@@ -453,12 +453,11 @@ func (ch *ch) handleRegisteredEvent(
 		err := registerDispute(ctx, chRegistry, registerer, parent)
 		log.Debugf("[watcher] handleRegisteredEvent registerDispute returned err=%v parent=%x", err, parent.id[:4])
 		if err != nil {
-			log.Error("Error registering dispute: ", err)
-			return
+			log.WithError(err).Warn("registerDispute failed; notifying client of on-chain event anyway")
+		} else {
+			log.Debug("Registered successfully")
+			ch.registered = true
 		}
-
-		log.Debug("Registered successfully")
-		ch.registered = true
 	}
 
 	if !ch.published || ch.publishedVersion < e.Version() {

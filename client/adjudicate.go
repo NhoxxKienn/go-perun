@@ -457,9 +457,10 @@ func (c *Channel) setRegisteredRecursive(ctx context.Context) (err error) {
 }
 
 func (c *Channel) setCoordinatedRecursive(ctx context.Context, e *channel.CoordinatedEvent) (err error) {
-	return c.applyRecursive(func(c *Channel) error {
-		return c.machine.SetCoordinated(ctx, e)
-	})
+	// Only update the root channel's phase. Sub-channels receive their own
+	// CoordinatedEvent via their Watch goroutines and must not have the parent
+	// state forced onto them.
+	return c.machine.SetCoordinated(ctx, e)
 }
 
 // gatherSubChannelStates gathers the state of all sub-channels recursively.
