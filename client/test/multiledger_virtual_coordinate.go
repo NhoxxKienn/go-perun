@@ -107,27 +107,26 @@ func TestMultiLedgerVirtualCoordinate( //nolint:cyclop
 		Sigs:   vtcReq.Tx.Sigs,
 	}
 	virtualSubStates := []channel.SignedState{virtualSignedState}
-
-	// Alice registers her parent channel on both ledgers.  The watcher detects
-	// the event and re-registers with the virtual sub-channel state to
-	// synchronise L1 and L2.
 	reqAlice := client.NewTestChannel(mlvc.chAliceHub).AdjudicatorReq()
-	err := mls.Alice.Adjudicator1.Register(ctx, reqAlice, nil)
-	require.NoError(err, "Alice: registering Alice-Hub on L1")
-	err = mls.Alice.Adjudicator2.Register(ctx, reqAlice, nil)
-	require.NoError(err, "Alice: registering Alice-Hub on L2")
-
-	// Bob registers his parent channel on both ledgers.
 	reqBob := client.NewTestChannel(mlvc.chBobHub).AdjudicatorReq()
-	err = mls.Bob.Adjudicator1.Register(ctx, reqBob, nil)
-	require.NoError(err, "Bob: registering Bob-Hub on L1")
-	err = mls.Bob.Adjudicator2.Register(ctx, reqBob, nil)
-	require.NoError(err, "Bob: registering Bob-Hub on L2")
+
+	// Register all four parent channel views.  Each registration includes the
+	// virtual sub-channel's latest state via registerDispute→gatherSubChannelStates.
+	parentChs := []*client.Channel{
+		mlvc.chAliceHub, mlvc.chHubAlice,
+		mlvc.chBobHub, mlvc.chHubBob,
+	}
+	perm := rand.Perm(len(parentChs))
+	t.Logf("register order = %v", perm)
+	for _, i := range perm {
+		err := client.NewTestChannel(parentChs[i]).Register(ctx)
+		require.NoErrorf(err, "registering parent channel %d", i)
+	}
 
 	// Wait for RegisteredEvent on Alice and Bob (watcher → Events channel).
 	eAlice := <-mls.Alice.Events
 	require.IsType(&channel.RegisteredEvent{}, eAlice, "Alice: expected RegisteredEvent")
-	err = eAlice.(*channel.RegisteredEvent).TimeoutV.Wait(ctx)
+	err := eAlice.(*channel.RegisteredEvent).TimeoutV.Wait(ctx)
 	require.NoError(err, "Alice: waiting for challenge timeout")
 
 	eBob := <-mls.Bob.Events
@@ -152,12 +151,12 @@ func TestMultiLedgerVirtualCoordinate( //nolint:cyclop
 
 	// Settle all four parent channel views.  Machine phases have been updated
 	// to Coordinated by the watchers, so ensureCoordinated returns immediately.
-	parentChs := []*client.Channel{
+	parentChs = []*client.Channel{
 		mlvc.chAliceHub, mlvc.chHubAlice,
 		mlvc.chBobHub, mlvc.chHubBob,
 	}
 	isSecondary := [2]bool{false, false}
-	perm := rand.Perm(len(parentChs))
+	perm = rand.Perm(len(parentChs))
 	t.Logf("settle order = %v", perm)
 	for _, i := range perm {
 		var e error
