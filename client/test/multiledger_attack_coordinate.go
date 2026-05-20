@@ -103,8 +103,8 @@ func TestMultiLedgerAttackNoCoordinator(
 
 	bID1 := wallet.BackendID(mlt.Asset1.LedgerBackendID().BackendID())
 	bID2 := wallet.BackendID(mlt.Asset2.LedgerBackendID().BackendID())
-	aliceAcc := alice.WalletAccount[channel.TestBackendID]
-	bobAcc := bob.WalletAccount[channel.TestBackendID]
+	aliceAcc := alice.WalletAccount[bID1]
+	bobAcc := bob.WalletAccount[bID1]
 
 	// Open channel WITHOUT a coordinator.
 	parts := []map[wallet.BackendID]wire.Address{alice.WireAddress, bob.WireAddress}
@@ -159,9 +159,9 @@ func TestMultiLedgerAttackNoCoordinator(
 
 	// SECRET v2: fabricated by the test (acting as Bob). Alice's machine still has v1.
 	accs := []wallet.Account{aliceAcc, bobAcc}
-	v2ReqBob, err := buildSecretSignedReq(v1ReqBob, mlt.UpdateBalances2, accs, channel.TestBackendID, 1)
+	v2ReqBob, err := buildSecretSignedReq(v1ReqBob, mlt.UpdateBalances2, accs, bID1, 1)
 	require.NoError(err, "building secret v2 req for Bob")
-	v2ReqAlice, err := buildSecretSignedReq(v1ReqAlice, mlt.UpdateBalances2, accs, channel.TestBackendID, 0)
+	v2ReqAlice, err := buildSecretSignedReq(v1ReqAlice, mlt.UpdateBalances2, accs, bID1, 0)
 	require.NoError(err, "building secret v2 req for Alice")
 
 	chID := chAliceBob.ID()
@@ -275,8 +275,8 @@ func TestMultiLedgerAttackCoordinate(
 
 	bID1 := wallet.BackendID(mlt.Asset1.LedgerBackendID().BackendID())
 	bID2 := wallet.BackendID(mlt.Asset2.LedgerBackendID().BackendID())
-	aliceAcc := alice.WalletAccount[channel.TestBackendID]
-	bobAcc := bob.WalletAccount[channel.TestBackendID]
+	aliceAcc := alice.WalletAccount[bID1]
+	bobAcc := bob.WalletAccount[bID1]
 
 	// Open channel WITH coordinator.
 	parts := []map[wallet.BackendID]wire.Address{alice.WireAddress, bob.WireAddress}
@@ -330,7 +330,7 @@ func TestMultiLedgerAttackCoordinate(
 
 	// Fabricate the SECRET v2 (Alice's machine still has v1).
 	accs := []wallet.Account{aliceAcc, bobAcc}
-	v2ReqBob, err := buildSecretSignedReq(v1Req, mlt.UpdateBalances2, accs, channel.TestBackendID, 1)
+	v2ReqBob, err := buildSecretSignedReq(v1Req, mlt.UpdateBalances2, accs, bID1, 1)
 	require.NoError(err, "building secret v2 req for Bob")
 
 	// Start watchers for both participants.
