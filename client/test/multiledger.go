@@ -265,6 +265,12 @@ func (c *MultiLedgerCoordinator) Sign(req channel.AdjudicatorReq, bid wallet.Bac
 	return coordSig, err
 }
 
+// SignState signs the given state for the given backend ID.
+func (c *MultiLedgerCoordinator) SignState(state *channel.State, bid wallet.BackendID) (wallet.Sig, error) {
+	coordSig, err := channel.Sign(c.WalletAccount[bid], state, bid)
+	return coordSig, err
+}
+
 // Coordinate coordinates a multi-ledger channel by dispatching the call to the multi-ledger coordinator.
 func (c *MultiLedgerCoordinator) Coordinate(ctx context.Context, req channel.AdjudicatorReq, signedSubstates []channel.SignedState, bid wallet.BackendID) error {
 	coordSigs := make([]wallet.Sig, len(signedSubstates)+1)
@@ -273,8 +279,8 @@ func (c *MultiLedgerCoordinator) Coordinate(ctx context.Context, req channel.Adj
 	if err != nil {
 		return fmt.Errorf("signing adjudicator request: %w", err)
 	}
-	for i := range signedSubstates {
-		coordSigs[i+1], err = c.Sign(req, bid)
+	for i, signedState := range signedSubstates {
+		coordSigs[i+1], err = c.SignState(signedState.State, bid)
 		if err != nil {
 			return fmt.Errorf("signing adjudicator request: %w", err)
 		}
