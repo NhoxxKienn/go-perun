@@ -157,6 +157,7 @@ type MultiLedgerClient struct {
 
 	WireAddress                    map[wallet.BackendID]wire.Address
 	WalletAddress                  map[wallet.BackendID]wallet.Address
+	WalletAccount                  map[wallet.BackendID]wallet.Account
 	Events                         chan channel.AdjudicatorEvent
 	Adjudicator1, Adjudicator2     channel.Adjudicator
 	BalanceReader1, BalanceReader2 BalanceReader
@@ -211,6 +212,7 @@ func setupClient(
 		Client:         c,
 		WireAddress:    wireAddr[0],
 		WalletAddress:  map[wallet.BackendID]wallet.Address{channel.TestBackendID: acc.Address()},
+		WalletAccount:  map[wallet.BackendID]wallet.Account{channel.TestBackendID: acc},
 		Events:         make(chan channel.AdjudicatorEvent),
 		Adjudicator1:   l1.NewAdjudicator(acc.Address()),
 		Adjudicator2:   l2.NewAdjudicator(acc.Address()),

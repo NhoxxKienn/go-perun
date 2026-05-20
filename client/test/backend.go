@@ -188,6 +188,14 @@ func (b *MockBackend) Register(_ context.Context, req channel.AdjudicatorReq, su
 		return nil
 	}
 
+	// Mirror on-chain contract: once the channel is in COORDINATED phase,
+	// further registrations are blocked.
+	if e, ok := b.latestEvents[ch]; ok {
+		if _, isCoord := e.(*channel.CoordinatedEvent); isCoord {
+			return fmt.Errorf("channel is in COORDINATED phase; further registration blocked")
+		}
+	}
+
 	// Check register requirements.
 	states := make([]*channel.State, 1+len(subChannels))
 	states[0] = req.Tx.State
@@ -279,6 +287,13 @@ func (b *MockBackend) Coordinate(_ context.Context, req channel.AdjudicatorReq, 
 	if b.isConcluded(ch) {
 		log.Debug("register: already concluded:", ch)
 		return nil
+	}
+
+	// Reject if the challenge timeout has not yet elapsed (mirrors on-chain behavior).
+	if e, ok := b.latestEvents[ch]; ok {
+		if tt, isTime := e.Timeout().(*channel.TimeTimeout); isTime && time.Now().Before(tt.Time) {
+			return fmt.Errorf("refutation timeout not passed")
+		}
 	}
 
 	// Check register requirements.

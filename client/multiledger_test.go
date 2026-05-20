@@ -47,3 +47,23 @@ func TestMultiLedgerCoordinate(t *testing.T) {
 
 	ctest.TestMultiLedgerCoordinate(ctx, t, mlt, challengeDuration)
 }
+
+func TestMultiLedgerAttackNoCoordinator(t *testing.T) {
+	mlt := ctest.SetupMultiLedgerTest(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), twoPartyTestTimeout)
+	defer cancel()
+
+	ctest.TestMultiLedgerAttackNoCoordinator(ctx, t, mlt, challengeDuration)
+}
+
+func TestMultiLedgerAttackCoordinate(t *testing.T) {
+	mlt := ctest.SetupMultiLedgerTest(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), twoPartyTestTimeout)
+	defer cancel()
+
+	// Use a 500 ms challenge duration so the 50 ms post-attack sleep is safely
+	// inside the refutation window for the negative test.
+	ctest.TestMultiLedgerAttackCoordinate(ctx, t, mlt, 500) //nolint:mnd
+}
