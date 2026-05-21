@@ -466,11 +466,14 @@ func checkRegister(e channel.AdjudicatorEvent, ok bool, s *channel.State) error 
 }
 
 // checkCoordinate checks the following for the given channels:
-// - If the channel is already registered, the given version must be greater or equal to the registered version.
+// - The channel must already be registered (in DISPUTE phase) — mirrors the on-chain contract.
+// - The registered version must be less than or equal to the state being coordinated.
 func checkCoordinate(e channel.AdjudicatorEvent, ok bool, s *channel.State) error {
-	v := s.Version
-	if ok && e.Version() < v {
-		return fmt.Errorf("invalid version: expected >=%v, got %v", e.Version(), v)
+	if !ok {
+		return fmt.Errorf("channel not in dispute phase; cannot coordinate")
+	}
+	if e.Version() > s.Version {
+		return fmt.Errorf("invalid version: expected >=%v, got %v", e.Version(), s.Version)
 	}
 	return nil
 }

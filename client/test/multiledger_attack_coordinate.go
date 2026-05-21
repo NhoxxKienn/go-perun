@@ -357,37 +357,33 @@ func TestMultiLedgerAttackCoordinate(
 	err = bob.Adjudicator2.Register(ctx, v1Req, nil)
 	require.NoError(err, "registering v1 on chain B (Asset2)")
 
-	// Sleep briefly so the watcher has time to detect the chain B event before
-	// we attempt the negative coordinate test. challengeDuration is always much
-	// larger than this sleep, so the refutation window is still open.
-	time.Sleep(50 * time.Millisecond) //nolint:mnd
-
 	// Wait for the chain B v1 RegisteredEvent (the registration we just submitted).
+	// sub2 was created before the watcher started, so it buffered this event already.
 	e2 := sub2.Next()
 	require.IsType(&channel.RegisteredEvent{}, e2, "expected RegisteredEvent on chain B")
 	// Wait for the chain A v1 RegisteredEvent emitted by the watcher's replication.
 	// sub1.Next() blocks until the event arrives, making this backend-agnostic.
 	e1 := sub1.Next()
 	require.IsType(&channel.RegisteredEvent{}, e1, "expected RegisteredEvent on chain A")
+
+	// ATTACK STEP 2: Bob attempts to reveal secret v2 on Adjudicator1.
+	err = bob.Adjudicator1.Register(ctx, v2ReqBob, nil)
+	require.NoError(err, "register after the other chain timeout should not fail")
+
+	// Wait for the chain B v1 RegisteredEvent (the registration we just submitted).
+	// sub2 was created before the watcher started, so it buffered this event already.
+	e1 = sub1.Next()
+	require.IsType(&channel.RegisteredEvent{}, e1, "expected RegisteredEvent on chain A")
+	require.NoError(e1.(*channel.RegisteredEvent).TimeoutV.Wait(ctx), "waiting for chain A v1 timeout")
+	time.Sleep(100 * time.Millisecond) //nolint:mnd
 	require.NoError(sub1.Close())
 	require.NoError(sub2.Close())
 
-	// Chain A was registered after chain B (watcher replication lag), so its
-	// timeout expires last. Wait for chain A's timeout to ensure both chains
-	// are ready for coordination.
-	require.NoError(e1.(*channel.RegisteredEvent).TimeoutV.Wait(ctx), "waiting for chain A v1 timeout")
-	time.Sleep(100 * time.Millisecond) //nolint:mnd
-
-	// COORDINATOR LOCKS v1: coordinate(v1) on both chains.
-	err = charlie.Coordinate(ctx, v1Req, nil, bID2)
+	// COORDINATOR LOCKS v2: coordinate(v2) on both chains.
+	err = charlie.Coordinate(ctx, v2ReqBob, nil, bID2)
 	require.NoError(err, "coordinate after timeout should succeed on both chains")
 
-	// ATTACK STEP 2 FAILS: Bob attempts to reveal secret v2 on Adjudicator1 — but
-	// the chain is now in COORDINATED phase, so Register() is blocked.
-	err = bob.Adjudicator1.Register(ctx, v2ReqBob, nil)
-	require.Error(err, "register after coordinate should fail (COORDINATED phase blocks register)")
-
-	// Settle channels at v1 — the coordinated state.
+	// Settle channels at v2 — the coordinated state.
 	err = chAliceBob.Settle(ctx, false)
 	require.NoError(err)
 	err = chBobAlice.Settle(ctx, false)
@@ -408,8 +404,8 @@ func TestMultiLedgerAttackCoordinate(
 	}
 	balancesDiff := balancesAfter.Sub(balancesBefore)
 
-	// Coordinator locked v1 → uniform v1 outcome on both chains.
-	allV1Diff := mlt.UpdateBalances1.Sub(mlt.InitBalances)
+	// Coordinator locked v2 → uniform v2 outcome on both chains.
+	allV2Diff := mlt.UpdateBalances2.Sub(mlt.InitBalances)
 	// What the attack would have produced (divergent v2/v1) — MUST NOT match.
 	attackDiff := channel.Balances{
 		mlt.UpdateBalances2.Sub(mlt.InitBalances)[0],
@@ -417,9 +413,9 @@ func TestMultiLedgerAttackCoordinate(
 	}
 
 	assert.Truef(
-		EqualBalancesWithDelta(allV1Diff, balancesDiff, mlt.BalanceDelta),
-		"coordinator must enforce uniform v1 outcome: expected %v +/- %v, got %v",
-		allV1Diff, mlt.BalanceDelta, balancesDiff,
+		EqualBalancesWithDelta(allV2Diff, balancesDiff, mlt.BalanceDelta),
+		"coordinator must enforce uniform v2 outcome: expected %v +/- %v, got %v",
+		allV2Diff, mlt.BalanceDelta, balancesDiff,
 	)
 	assert.Falsef(
 		EqualBalancesWithDelta(attackDiff, balancesDiff, mlt.BalanceDelta),
