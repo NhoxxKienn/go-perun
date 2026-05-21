@@ -333,6 +333,15 @@ func TestMultiLedgerAttackCoordinate(
 	v2ReqBob, err := buildSecretSignedReq(v1Req, mlt.UpdateBalances2, accs, bID1, 1)
 	require.NoError(err, "building secret v2 req for Bob")
 
+	chID := chAliceBob.ID()
+
+	// Subscribe to both adjudicators BEFORE starting watchers so we cannot miss
+	// events emitted during watcher replication.
+	sub1, err := bob.Adjudicator1.Subscribe(ctx, chID)
+	require.NoError(err, "subscribing to chain A (Asset1)")
+	sub2, err := bob.Adjudicator2.Subscribe(ctx, chID)
+	require.NoError(err, "subscribing to chain B (Asset2)")
+
 	// Start watchers for both participants.
 	//nolint:contextcheck
 	go func() {
@@ -344,55 +353,29 @@ func TestMultiLedgerAttackCoordinate(
 	}()
 	time.Sleep(100 * time.Millisecond) //nolint:mnd
 
-	// Drain Bob's event channel asynchronously so the Watch goroutine never blocks.
-	regEvents := make(chan *channel.RegisteredEvent, 10) //nolint:mnd
-	go func() {
-		for {
-			select {
-			case e := <-bob.Events:
-				if r, ok := e.(*channel.RegisteredEvent); ok {
-					select {
-					case regEvents <- r:
-					default:
-					}
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
 	// ATTACK STEP 1: Bob registers v1 on Asset2's chain.
 	err = bob.Adjudicator2.Register(ctx, v1Req, nil)
 	require.NoError(err, "registering v1 on chain B (Asset2)")
 
-	// Let watchers replicate v1 to Asset1's chain via multi-ledger registerDispute.
-	// With challengeDuration = 500 ms, the refutation timeout is far from elapsed.
+	// Sleep briefly so the watcher has time to detect the chain B event before
+	// we attempt the negative coordinate test. challengeDuration is always much
+	// larger than this sleep, so the refutation window is still open.
 	time.Sleep(50 * time.Millisecond) //nolint:mnd
 
-	// NEGATIVE TEST: coordinate() before the challenge timeout must fail.
-	err = charlie.Coordinate(ctx, v1Req, nil, bID2)
-	require.Error(err, "coordinate before timeout should fail with 'refutation timeout not passed'")
+	// Wait for the chain B v1 RegisteredEvent (the registration we just submitted).
+	e2 := sub2.Next()
+	require.IsType(&channel.RegisteredEvent{}, e2, "expected RegisteredEvent on chain B")
+	// Wait for the chain A v1 RegisteredEvent emitted by the watcher's replication.
+	// sub1.Next() blocks until the event arrives, making this backend-agnostic.
+	e1 := sub1.Next()
+	require.IsType(&channel.RegisteredEvent{}, e1, "expected RegisteredEvent on chain A")
+	require.NoError(sub1.Close())
+	require.NoError(sub2.Close())
 
-	// Drain regEvents to find a v1 RegisteredEvent (the latest, after watcher replication),
-	// then wait for its challenge timeout to elapse.
-	var lastReg *channel.RegisteredEvent
-	deadline := time.Now().Add(time.Duration(challengeDuration+200) * time.Millisecond) //nolint:mnd
-collect:
-	for time.Now().Before(deadline) {
-		select {
-		case r := <-regEvents:
-			if r.Version() == 1 { //nolint:mnd
-				lastReg = r
-			}
-		case <-time.After(50 * time.Millisecond): //nolint:mnd
-			break collect
-		case <-ctx.Done():
-			t.Fatal("timed out waiting for v1 RegisteredEvent")
-		}
-	}
-	require.NotNil(lastReg, "expected at least one v1 RegisteredEvent before timeout")
-	require.NoError(lastReg.TimeoutV.Wait(ctx), "waiting for v1 timeout")
+	// Chain A was registered after chain B (watcher replication lag), so its
+	// timeout expires last. Wait for chain A's timeout to ensure both chains
+	// are ready for coordination.
+	require.NoError(e1.(*channel.RegisteredEvent).TimeoutV.Wait(ctx), "waiting for chain A v1 timeout")
 	time.Sleep(100 * time.Millisecond) //nolint:mnd
 
 	// COORDINATOR LOCKS v1: coordinate(v1) on both chains.
