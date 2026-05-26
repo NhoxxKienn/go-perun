@@ -19,7 +19,6 @@ const (
 	notifyWatchSubProtocolID    = "/coordinator/notify-watch-sub/1.0.0"
 	notifyStopWatchProtocolID   = "/coordinator/notify-stop-watch/1.0.0"
 
-	coordID             = "coordinator" //TODO:add the coordinator's peer ID here
 	responseStatusOK    = "ok"
 	responseStatusError = "error"
 )
@@ -48,17 +47,22 @@ var _ multi.CoordinatorNotifier = (*RelayCoordinatorNotifier)(nil)
 
 // RelayCoordinatorNotifier is a simple implementation of CoordinatorNotifier that relays notifications to the coordinator via the Account.
 type RelayCoordinatorNotifier struct {
-	account *Account
+	account     *Account
+	coordPeerID peer.ID
 }
 
-// NewRelayCoordinatorNotifier creates a new RelayCoordinatorNotifier with the given Account.
-func NewRelayCoordinatorNotifier(acc *Account) *RelayCoordinatorNotifier {
-	return &RelayCoordinatorNotifier{account: acc}
+// NewRelayCoordinatorNotifier creates a new RelayCoordinatorNotifier with the
+// given Account and the coordinator's libp2p peer.ID.
+func NewRelayCoordinatorNotifier(acc *Account, coordPeerID peer.ID) *RelayCoordinatorNotifier {
+	return &RelayCoordinatorNotifier{account: acc, coordPeerID: coordPeerID}
 }
 
 // NotifyWatchLedgerChannel sends a notification to the coordinator to start watching a ledger channel.
 func (r *RelayCoordinatorNotifier) NotifyWatchLedgerChannel(ctx context.Context, signedState channel.SignedState) error {
-	s, err := r.account.newRelayStream(ctx, coordID, notifyWatchLedgerProtocolID)
+	if r.coordPeerID == (peer.ID)("") {
+		return errors.New("coordinator peer ID not configured; use NewRelayCoordinatorNotifierWithPeerID")
+	}
+	s, err := r.account.newRelayStream(ctx, r.coordPeerID, notifyWatchLedgerProtocolID)
 	if err != nil {
 		return err
 	}
@@ -98,8 +102,10 @@ func (r *RelayCoordinatorNotifier) NotifyWatchLedgerChannel(ctx context.Context,
 
 // NotifyWatchSubChannel sends a notification to the coordinator to start watching a sub channel.
 func (r *RelayCoordinatorNotifier) NotifyWatchSubChannel(ctx context.Context, parent channel.ID, signedState channel.SignedState) error {
-
-	s, err := r.account.newRelayStream(ctx, coordID, notifyWatchSubProtocolID)
+	if r.coordPeerID == (peer.ID)("") {
+		return errors.New("coordinator peer ID not configured; use NewRelayCoordinatorNotifierWithPeerID")
+	}
+	s, err := r.account.newRelayStream(ctx, r.coordPeerID, notifyWatchSubProtocolID)
 	if err != nil {
 		return err
 	}
@@ -139,8 +145,10 @@ func (r *RelayCoordinatorNotifier) NotifyWatchSubChannel(ctx context.Context, pa
 
 // NotifyStopWatch sends a notification to the coordinator to stop watching a channel.
 func (r *RelayCoordinatorNotifier) NotifyStopWatch(ctx context.Context, id channel.ID) error {
-
-	s, err := r.account.newRelayStream(ctx, coordID, notifyStopWatchProtocolID)
+	if r.coordPeerID == (peer.ID)("") {
+		return errors.New("coordinator peer ID not configured; use NewRelayCoordinatorNotifierWithPeerID")
+	}
+	s, err := r.account.newRelayStream(ctx, r.coordPeerID, notifyStopWatchProtocolID)
 	if err != nil {
 		return err
 	}

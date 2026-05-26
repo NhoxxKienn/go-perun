@@ -112,3 +112,7 @@ func IsPhaseTransitionError(err error) bool {
 	_, ok := cause.(*PhaseTransitionError)
 	return ok
 }
+
+// ErrChannelAlreadyConcluded is returned when an operation is attempted on a
+// channel that has already been concluded on-chain.
+var ErrChannelAlreadyConcluded = errors.New("channel already concluded")

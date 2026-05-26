@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
+
 	"perun.network/go-perun/channel"
 	"perun.network/go-perun/wallet"
 )
@@ -44,10 +46,9 @@ func (c *Coordinator) Coordinate(ctx context.Context, req channel.AdjudicatorReq
 		return err
 	}
 
-	err = c.dispatch(ledgerIDs, func(lc channel.Coordinator) error {
+	return c.dispatch(ctx, ledgerIDs, func(lc channel.Coordinator) error {
 		return lc.Coordinate(ctx, req, signedStates, coordSigs)
 	})
-	return err
 }
 
 // Subscribe creates a new multi-ledger AdjudicatorSubscription.
@@ -87,34 +88,25 @@ func (c *Coordinator) Subscribe(ctx context.Context, chID channel.ID) (channel.A
 }
 
 // dispatch dispatches an adjudicator call on all given ledgers.
-func (c *Coordinator) dispatch(assetIDs []LedgerBackendID, f func(channel.Coordinator) error) error {
-	n := len(assetIDs)
-	errs := make(chan error, n)
+func (c *Coordinator) dispatch(ctx context.Context, assetIDs []LedgerBackendID, f func(channel.Coordinator) error) error {
+	g, _ := errgroup.WithContext(ctx)
 
 	for _, l := range assetIDs {
-		go func(l LedgerBackendID) {
-			err := func() error {
-				key := LedgerBackendKey{BackendID: l.BackendID(), LedgerID: string(l.LedgerID().MapKey())}
+		l := l
+		g.Go(func() error {
+			key := LedgerBackendKey{BackendID: l.BackendID(), LedgerID: string(l.LedgerID().MapKey())}
 
-				coord, ok := c.coordinators[key]
-				if !ok {
-					return fmt.Errorf("coordinator not found for id %v", l)
-				}
+			coord, ok := c.coordinators[key]
+			if !ok {
+				return fmt.Errorf("coordinator not found for id %v", l)
+			}
 
-				// Call the provided function f with the Coordinator
-				err := f(coord)
-				return err
-			}()
-			errs <- err
-		}(l)
+			// Call the provided function f with the Coordinator. If the
+			// underlying implementation respects context cancellation, use
+			// gctx via closures passed to f.
+			return f(coord)
+		})
 	}
 
-	for range n {
-		err := <-errs
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return g.Wait()
 }

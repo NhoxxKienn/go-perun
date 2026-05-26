@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
+
 	"perun.network/go-perun/channel"
 )
 
@@ -55,10 +57,9 @@ func (a *Adjudicator) Register(ctx context.Context, req channel.AdjudicatorReq, 
 		return err
 	}
 
-	err = a.dispatch(ledgerIDs, func(la channel.Adjudicator) error {
+	return a.dispatch(ctx, ledgerIDs, func(la channel.Adjudicator) error {
 		return la.Register(ctx, req, subStates)
 	})
-	return err
 }
 
 // Progress progresses the state of a multi-ledger channel. It dispatches
@@ -70,10 +71,9 @@ func (a *Adjudicator) Progress(ctx context.Context, req channel.ProgressReq) err
 		return err
 	}
 
-	err = a.dispatch(ledgerIDs, func(la channel.Adjudicator) error {
+	return a.dispatch(ctx, ledgerIDs, func(la channel.Adjudicator) error {
 		return la.Progress(ctx, req)
 	})
-	return err
 }
 
 // Withdraw withdraws the funds from a multi-ledger channel. It dispatches
@@ -85,41 +85,29 @@ func (a *Adjudicator) Withdraw(ctx context.Context, req channel.AdjudicatorReq, 
 		return err
 	}
 
-	err = a.dispatch(ledgerIDs, func(la channel.Adjudicator) error {
+	return a.dispatch(ctx, ledgerIDs, func(la channel.Adjudicator) error {
 		return la.Withdraw(ctx, req, subStates)
 	})
-	return err
 }
 
 // dispatch dispatches an adjudicator call on all given ledgers.
-func (a *Adjudicator) dispatch(assetIds []LedgerBackendID, f func(channel.Adjudicator) error) error {
-	n := len(assetIds)
-	errs := make(chan error, n)
+func (a *Adjudicator) dispatch(ctx context.Context, assetIds []LedgerBackendID, f func(channel.Adjudicator) error) error {
+	g, _ := errgroup.WithContext(ctx)
 
 	for _, l := range assetIds {
-		go func(l LedgerBackendID) {
-			err := func() error {
-				key := LedgerBackendKey{BackendID: l.BackendID(), LedgerID: string(l.LedgerID().MapKey())}
+		l := l
+		g.Go(func() error {
+			key := LedgerBackendKey{BackendID: l.BackendID(), LedgerID: string(l.LedgerID().MapKey())}
 
-				adjs, ok := a.adjudicators[key]
-				if !ok {
-					return fmt.Errorf("adjudicator not found for id %v", l)
-				}
+			adjs, ok := a.adjudicators[key]
+			if !ok {
+				return fmt.Errorf("adjudicator not found for id %v", l)
+			}
 
-				// Call the provided function f with the Adjudicator
-				err := f(adjs)
-				return err
-			}()
-			errs <- err
-		}(l)
+			// Call the provided function f with the Adjudicator
+			return f(adjs)
+		})
 	}
 
-	for range n {
-		err := <-errs
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return g.Wait()
 }
