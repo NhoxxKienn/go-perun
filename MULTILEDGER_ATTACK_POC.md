@@ -1535,32 +1535,6 @@ For a faithful end-to-end demo, prefer the libp2p wiring of 13.4. For a fast,
 self-contained correctness proof of the canonical-state-selection logic and the
 contract invariants, the inline version of 9.3 is sufficient.
 
-### 13.7 Known gaps and TODOs
-
-Open (require upstream go-perun changes — out of scope for this repo):
-
-| #   | Location                                  | Issue                                                                                                                                                                                                                                                                                                                             |
-| --- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `go-perun/wire/net/libp2p/coordinator.go` | Replaced hardcoded `coordID` usage: `RelayCoordinatorNotifier` now accepts the coordinator `peer.ID` via `NewRelayCoordinatorNotifierWithPeerID(acc, peerID)` and returns a clear error when not configured. Keeps backward-compatible `NewRelayCoordinatorNotifier(acc)` (convenience) but prefer the peer-ID-aware constructor. |
-| 2   | `channel` package                         | Exported typed sentinel error `channel.ErrChannelAlreadyConcluded` so external coordinators can use `errors.Is(err, channel.ErrChannelAlreadyConcluded)` instead of fragile substring matching.                                                                                                                                   |
-| 3   | `go-perun/channel/multi`                  | `dispatch()` now uses cancellable parallel dispatch via `errgroup.WithContext(ctx)` and returns the first error while cancelling remaining in-flight calls. This prevents partial-fire-and-forget behavior and allows callers to observe failures deterministically.                                                              |
-
-Fixed in this repo:
-
-| #   | Location                                                                | Resolution                                                                                                                                                                                                                                                                                                                  |
-| --- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 4   | `cross-chain-coordinator/coordinator/watcher.go: handleEventsFromChain` | **Fixed.** Loop now calls `NextWithKey()` every iteration so `ledgerKey` updates per event. The previous `for init; cond; post` form left `ledgerKey` frozen at the first event's value, silently corrupting per-chain dispute tracking.                                                                                    |
-| 5   | `cross-chain-coordinator/coordinator/host.go`                           | **Fixed.** Added `CoordinatorHost.Wait(timeout)` plus a per-call `coordinateTimeout` (`defaultCoordinateTimeout = 5 min`); every `coordinate()` invocation is tracked in `coordWg` and runs under `context.WithTimeout`. Callers (graceful shutdown, tests) invoke `Wait` before tearing down the underlying chain backend. |
-| 6   | `cross-chain-coordinator/backends/config.go: Validate`                  | **Fixed.** `chainURL` is now required and must start with `ws://` or `wss://`; `adjudicator_addr` must be non-empty. Covered by `TestValidate_HTTPChainURLRejected` / `_EmptyChainURLRejected` / `_WSSChainURLAccepted` / `_EmptyAdjudicatorAddrRejected`.                                                                  |
-| 7   | `cross-chain-coordinator/main.go`                                       | **Fixed.** The unused `-flush` flag (and the `flushInterval` parameter to `runRelay`) is removed. Persistence of watched channels across restarts is still missing and tracked separately.                                                                                                                                  |
-
-Two additional bugs found during the audit and fixed:
-
-- **`coordinator/coordinator.go: coordinate()`** — `selectCanonicalSignedState` can
-  return `nil` when no chain has recorded a state yet. The previous code dereferenced
-  `canonical.State` unconditionally, panicking. Now guarded by
-  `if canonical == nil || canonical.State == nil`.
-- **`coordinator/watcher.go: handleEventsFromChain`** — see gap #4 above.
 
 #### Test-shutdown subscription nil-receipt panic
 

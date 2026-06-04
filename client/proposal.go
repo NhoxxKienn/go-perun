@@ -403,11 +403,13 @@ func (c *Client) validTwoPartyProposal(
 	coordinator := proposal.Base().Coordinator
 	isCoordinated := channel.IsCoordinated(coordinator)
 	if isCoordinated {
-		if len(coordinator) != 1 {
-			return errors.Errorf("expected exactly 1 coordinator, got %d", len(coordinator))
+		numBackends := len(proposal.Base().InitBals.Backends)
+		if len(coordinator) > numBackends {
+			return errors.Errorf("coordinator has %d entries but channel only has %d backends",
+				len(coordinator), numBackends)
 		}
 		if !channel.IsValidCoordinatorWithBackend(coordinator, proposal.Base().InitBals.Backends) {
-			return errors.New("invalid coordinator: backend does not match assets")
+			return errors.New("invalid coordinator: one or more coordinator backends not present in channel backends")
 		}
 	}
 

@@ -16,6 +16,7 @@ package channel
 
 import (
 	"errors"
+	"sort"
 
 	"perun.network/go-perun/wallet"
 )
@@ -64,9 +65,17 @@ func SetBackend(b Backend, id int) {
 }
 
 // CalcID calculates the CalcID.
+// Backends are tried in ascending BackendID order so the result is deterministic
+// regardless of Go's map-iteration randomness.
 func CalcID(p *Params) (ID, error) {
+	keys := make([]wallet.BackendID, 0, len(p.Parts[0]))
+	for k := range p.Parts[0] {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
 	var lastErr error
-	for i := range p.Parts[0] {
+	for _, i := range keys {
 		id, err := backend[i].CalcID(p)
 		if err == nil {
 			return id, nil
