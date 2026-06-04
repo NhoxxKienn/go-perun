@@ -481,7 +481,7 @@ func registerDispute(ctx context.Context, r *registry, registerer channel.Regist
 
 	parentCh.registeredVersion = parentTx.Version
 	for i := range subStates {
-		subCh, ok := r.retrieve(parentTx.Allocation.Locked[i].ID)
+		subCh, ok := r.retrieve(subStates[i].Params.ID())
 		if ok {
 			subCh.registeredVersion = subStates[i].State.Version
 		}
@@ -492,7 +492,7 @@ func registerDispute(ctx context.Context, r *registry, registerer channel.Regist
 func retrieveLatestSubStates(r *registry, parent *ch) (channel.Transaction, []channel.SignedState) {
 	parentTx := parent.txRetriever.retrieve()
 
-	subStates := make([]channel.SignedState, len(parentTx.Locked))
+	subStates := make([]channel.SignedState, 0, len(parentTx.Locked))
 	for i := range parentTx.Locked {
 		// Can be done concurrently.
 		subCh, ok := r.retrieve(parentTx.Locked[i].ID)
@@ -501,9 +501,11 @@ func retrieveLatestSubStates(r *registry, parent *ch) (channel.Transaction, []ch
 				parentTx.Locked[i].ID[:4])
 			subChTx := subCh.txRetriever.retrieve()
 			log.Debugf("[watcher] retrieveLatestSubStates subCh version=%d", subChTx.Version)
-			subStates[i] = makeSignedState(subCh.params, subChTx)
+			subStates = append(subStates, makeSignedState(subCh.params, subChTx))
+		} else if ss, ok := parent.archivedSubChStates[parentTx.Locked[i].ID]; ok {
+			subStates = append(subStates, ss)
 		} else {
-			subStates[i] = parent.archivedSubChStates[parentTx.Locked[i].ID]
+			log.Debugf("[watcher] retrieveLatestSubStates: no state for sub-channel %x, skipping", parentTx.Locked[i].ID[:4])
 		}
 	}
 	return parentTx, subStates
